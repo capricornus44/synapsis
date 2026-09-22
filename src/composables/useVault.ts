@@ -97,6 +97,44 @@ export function useVault() {
     await refreshFileTree();
   };
 
+  const getParentDir = (path: string) => {
+    const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+    return idx === -1 ? "" : path.slice(0, idx);
+  };
+
+  const renamePath = async (item: NoteInfo, newName: string) => {
+    if (!vaultPath.value) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const parentDir = getParentDir(item.path);
+    const finalName = item.is_dir
+      ? trimmed
+      : `${trimmed.replace(/\.md$/, "")}.md`;
+    const newPath = `${parentDir}/${finalName}`;
+    if (newPath === item.path) return;
+
+    await invoke("rename_path", { oldPath: item.path, newPath });
+
+    if (item.is_dir) {
+      if (
+        activeNotePath.value &&
+        (activeNotePath.value === item.path ||
+          activeNotePath.value.startsWith(`${item.path}/`))
+      ) {
+        activeNotePath.value = null;
+        activeNoteName.value = "";
+        activeNoteContent.value = "";
+        backlinks.value = [];
+        isDirty.value = false;
+      }
+    } else if (activeNotePath.value === item.path) {
+      activeNotePath.value = newPath;
+      activeNoteName.value = finalName.replace(/\.md$/, "");
+    }
+
+    await refreshFileTree();
+  };
+
   const deleteNote = async (path: string) => {
     await invoke("delete_note", { path });
     if (activeNotePath.value === path) {
@@ -154,6 +192,7 @@ export function useVault() {
     openNoteByName,
     createNote,
     createFolder,
+    renamePath,
     deleteNote,
     saveNote,
     updateContent,

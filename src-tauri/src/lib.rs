@@ -17,6 +17,7 @@ pub fn run() {
             commands::read_note,
             commands::write_note,
             commands::create_folder,
+            commands::rename_path,
             commands::delete_note,
             commands::get_backlinks
         ])

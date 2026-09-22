@@ -4,6 +4,7 @@ import { useVault, type NoteInfo } from "./composables/useVault";
 import NoteEditor from "./components/NoteEditor.vue";
 import NotePreview from "./components/NotePreview.vue";
 import FileTreeItem from "./components/FileTreeItem.vue";
+import ContextMenu from "./components/ContextMenu.vue";
 import DeleteConfirmationDialog from "./dialogs/DeleteConfirmationDialog.vue";
 import {
   FolderOpen as FolderOpenIcon,
@@ -35,6 +36,7 @@ const {
   openNoteByName,
   createNote,
   createFolder,
+  renamePath,
   deleteNote,
   saveNote,
   updateContent,
@@ -49,6 +51,10 @@ const createMode = ref<CreateMode | null>(null);
 const createTargetFolder = ref<NoteInfo | null>(null);
 const createInputTitle = ref("");
 const deleteTarget = ref<NoteInfo | null>(null);
+const renamingPath = ref<string | null>(null);
+const contextMenuTarget = ref<{ item: NoteInfo; x: number; y: number } | null>(
+  null,
+);
 
 const vaultFolderName = computed(() => {
   if (!vaultPath.value) return "";
@@ -106,6 +112,27 @@ const cancelDelete = () => {
   deleteTarget.value = null;
 };
 
+const handleContextMenu = (item: NoteInfo, event: MouseEvent) => {
+  contextMenuTarget.value = { item, x: event.clientX, y: event.clientY };
+};
+
+const closeContextMenu = () => {
+  contextMenuTarget.value = null;
+};
+
+const startRename = (item: NoteInfo) => {
+  renamingPath.value = item.path;
+};
+
+const cancelRename = () => {
+  renamingPath.value = null;
+};
+
+const submitRename = async (item: NoteInfo, newName: string) => {
+  renamingPath.value = null;
+  await renamePath(item, newName);
+};
+
 const handleOpenBacklink = (targetName: string) => {
   openNoteByName(targetName);
 };
@@ -148,6 +175,10 @@ const submitCreate = async () => {
 // Cmd/Ctrl + F to new folder, Cmd/Ctrl + R to refresh vault, Escape to close modals)
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === "Escape") {
+    if (contextMenuTarget.value) {
+      closeContextMenu();
+      return;
+    }
     if (deleteTarget.value) {
       cancelDelete();
       return;
@@ -359,10 +390,11 @@ onUnmounted(() => {
           :key="item.path"
           :item="item"
           :active-path="activeNotePath"
+          :renaming-path="renamingPath"
           @open="handleSelectNote"
-          @delete="handleDeleteNote"
-          @create-note-in="startCreateNote($event)"
-          @create-folder-in="startCreateFolder($event)"
+          @rename="submitRename"
+          @rename-cancel="cancelRename"
+          @context-menu="handleContextMenu"
         />
       </div>
 
@@ -562,6 +594,19 @@ onUnmounted(() => {
       :item="deleteTarget"
       @confirm="confirmDelete"
       @cancel="cancelDelete"
+    />
+
+    <!-- Right-click Context Menu -->
+    <ContextMenu
+      v-if="contextMenuTarget"
+      :item="contextMenuTarget.item"
+      :x="contextMenuTarget.x"
+      :y="contextMenuTarget.y"
+      @rename="startRename(contextMenuTarget.item)"
+      @delete="handleDeleteNote(contextMenuTarget.item)"
+      @create-note="startCreateNote(contextMenuTarget.item)"
+      @create-folder="startCreateFolder(contextMenuTarget.item)"
+      @close="closeContextMenu"
     />
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import type { NoteInfo } from "../composables/useVault";
 import {
   Folder as FolderIcon,
@@ -7,22 +7,20 @@ import {
   FileText as FileTextIcon,
   ChevronRight as ChevronRightIcon,
   ChevronDown as ChevronDownIcon,
-  Trash2 as Trash2Icon,
-  Plus as PlusIcon,
-  FolderPlus as FolderPlusIcon,
 } from "@lucide/vue";
 
 const props = defineProps<{
   item: NoteInfo;
   activePath: string | null;
+  renamingPath?: string | null;
   depth?: number;
 }>();
 
 const emit = defineEmits<{
   (e: "open", item: NoteInfo): void;
-  (e: "delete", item: NoteInfo): void;
-  (e: "create-note-in", folder: NoteInfo): void;
-  (e: "create-folder-in", folder: NoteInfo): void;
+  (e: "rename", item: NoteInfo, newName: string): void;
+  (e: "rename-cancel"): void;
+  (e: "context-menu", item: NoteInfo, event: MouseEvent): void;
 }>();
 
 const isOpen = ref(true);
@@ -39,8 +37,39 @@ const handleClick = () => {
   }
 };
 
-const handleDelete = () => {
-  emit("delete", props.item);
+const handleContextMenu = (e: MouseEvent) => {
+  emit("context-menu", props.item, e);
+};
+
+const isRenaming = computed(() => props.renamingPath === props.item.path);
+const renameValue = ref("");
+const renameInputRef = ref<HTMLInputElement | null>(null);
+let suppressBlurCommit = false;
+
+watch(isRenaming, (active) => {
+  if (active) {
+    renameValue.value = props.item.is_dir
+      ? props.item.name
+      : props.item.name.replace(/\.md$/, "");
+    nextTick(() => {
+      renameInputRef.value?.focus();
+      renameInputRef.value?.select();
+    });
+  }
+});
+
+const commitRename = () => {
+  if (suppressBlurCommit) {
+    suppressBlurCommit = false;
+    return;
+  }
+  const trimmed = renameValue.value.trim();
+  emit("rename", props.item, trimmed || props.item.name);
+};
+
+const cancelRename = () => {
+  suppressBlurCommit = true;
+  emit("rename-cancel");
 };
 </script>
 
@@ -48,6 +77,7 @@ const handleDelete = () => {
   <div class="select-none text-sm">
     <div
       @click="handleClick"
+      @contextmenu.prevent="handleContextMenu"
       :style="{ paddingLeft: `${(props.depth || 0) * 12 + 8}px` }"
       :class="[
         'group flex items-center justify-between py-1 px-2 rounded-md cursor-pointer transition-colors duration-150',
@@ -56,7 +86,7 @@ const handleDelete = () => {
           : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200',
       ]"
     >
-      <div class="flex items-center gap-1.5 min-w-0 truncate">
+      <div class="flex items-center gap-1.5 min-w-0 truncate flex-1">
         <template v-if="props.item.is_dir">
           <component
             :is="isOpen ? ChevronDownIcon : ChevronRightIcon"
@@ -66,45 +96,38 @@ const handleDelete = () => {
             :is="isOpen ? FolderOpenIcon : FolderIcon"
             class="w-4 h-4 text-amber-400/80 shrink-0"
           />
-          <span class="truncate">{{ props.item.name }}</span>
+          <input
+            v-if="isRenaming"
+            ref="renameInputRef"
+            v-model="renameValue"
+            type="text"
+            @click.stop
+            @keydown.enter="commitRename"
+            @keydown.escape="cancelRename"
+            @blur="commitRename"
+            class="w-full min-w-0 bg-neutral-950 border border-emerald-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+          />
+          <span v-else class="truncate">{{ props.item.name }}</span>
         </template>
 
         <template v-else>
           <span class="w-3.5 shrink-0"></span>
           <FileTextIcon class="w-4 h-4 text-emerald-400/70 shrink-0" />
-          <span class="truncate">{{
+          <input
+            v-if="isRenaming"
+            ref="renameInputRef"
+            v-model="renameValue"
+            type="text"
+            @click.stop
+            @keydown.enter="commitRename"
+            @keydown.escape="cancelRename"
+            @blur="commitRename"
+            class="w-full min-w-0 bg-neutral-950 border border-emerald-500 rounded px-1 py-0.5 text-xs text-white focus:outline-none"
+          />
+          <span v-else class="truncate">{{
             props.item.name.replace(/\.md$/, "")
           }}</span>
         </template>
-      </div>
-
-      <!-- Action buttons (visible on hover) -->
-      <div
-        class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0 ml-1"
-      >
-        <template v-if="props.item.is_dir">
-          <button
-            @click.stop="emit('create-note-in', props.item)"
-            :title="`New note inside ${props.item.name}`"
-            class="p-1 rounded hover:bg-neutral-700/80 text-neutral-400 hover:text-emerald-400 transition-colors"
-          >
-            <PlusIcon class="w-3.5 h-3.5" />
-          </button>
-          <button
-            @click.stop="emit('create-folder-in', props.item)"
-            :title="`New subfolder inside ${props.item.name}`"
-            class="p-1 rounded hover:bg-neutral-700/80 text-neutral-400 hover:text-amber-400 transition-colors"
-          >
-            <FolderPlusIcon class="w-3.5 h-3.5" />
-          </button>
-        </template>
-        <button
-          @click.stop="handleDelete"
-          :title="`Delete ${props.item.name}`"
-          class="p-1 rounded hover:bg-neutral-700/80 text-neutral-400 hover:text-red-400 transition-colors"
-        >
-          <Trash2Icon class="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
 
@@ -115,11 +138,12 @@ const handleDelete = () => {
         :key="child.path"
         :item="child"
         :active-path="props.activePath"
+        :renaming-path="props.renamingPath"
         :depth="(props.depth || 0) + 1"
         @open="emit('open', $event)"
-        @delete="emit('delete', $event)"
-        @create-note-in="emit('create-note-in', $event)"
-        @create-folder-in="emit('create-folder-in', $event)"
+        @rename="(item, newName) => emit('rename', item, newName)"
+        @rename-cancel="emit('rename-cancel')"
+        @context-menu="(item, event) => emit('context-menu', item, event)"
       />
     </div>
   </div>

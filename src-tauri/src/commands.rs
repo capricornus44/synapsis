@@ -37,6 +37,11 @@ pub async fn create_folder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
+    fs::rename(old_path, new_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn delete_note(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     if !p.exists() {

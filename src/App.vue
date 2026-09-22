@@ -144,7 +144,8 @@ const submitCreate = async () => {
   cancelCreate();
 };
 
-// Keyboard shortcut handler (Cmd/Ctrl + S to save, Cmd/Ctrl + N to new note, Escape to close modals)
+// Keyboard shortcut handler (Cmd/Ctrl + S to save, Cmd/Ctrl + N to new note,
+// Cmd/Ctrl + F to new folder, Cmd/Ctrl + R to refresh vault, Escape to close modals)
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === "Escape") {
     if (deleteTarget.value) {
@@ -167,6 +168,16 @@ const handleKeydown = (e: KeyboardEvent) => {
     e.preventDefault();
     if (vaultPath.value) {
       startCreateNote();
+    }
+  } else if (isModifier && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    if (vaultPath.value) {
+      startCreateFolder();
+    }
+  } else if (isModifier && e.key.toLowerCase() === "r") {
+    e.preventDefault();
+    if (vaultPath.value) {
+      refreshFileTree();
     }
   }
 };
@@ -236,14 +247,14 @@ onUnmounted(() => {
             <div class="flex items-center gap-1">
               <button
                 @click="refreshFileTree"
-                title="Refresh Vault"
+                title="Refresh Vault (Ctrl/Cmd+R)"
                 class="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
               >
                 <RotateCcwIcon class="w-3.5 h-3.5" />
               </button>
               <button
                 @click="startCreateFolder()"
-                title="New Folder"
+                title="New Folder (Ctrl/Cmd+F)"
                 class="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
               >
                 <FolderPlusIcon class="w-4 h-4" />

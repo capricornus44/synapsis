@@ -16,6 +16,8 @@ export interface NoteTab {
   isDirty: boolean;
 }
 
+const AUTOSAVE_DELAY_MS = 1200;
+
 export function useVault() {
   const vaultPath = ref<string | null>(null);
   const fileTree = ref<NoteInfo[]>([]);
@@ -23,6 +25,7 @@ export function useVault() {
   const activeTabPath = ref<string | null>(null);
   const backlinks = ref<string[]>([]);
   const isSaving = ref<boolean>(false);
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const activeTab = computed(
     () => tabs.value.find((t) => t.path === activeTabPath.value) ?? null,
@@ -32,9 +35,37 @@ export function useVault() {
   const activeNoteContent = computed(() => activeTab.value?.content ?? "");
   const isDirty = computed(() => activeTab.value?.isDirty ?? false);
 
+  const clearAutosaveTimer = () => {
+    if (autosaveTimer !== null) {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+    }
+  };
+
+  const persistTab = async (tab: NoteTab) => {
+    isSaving.value = true;
+    try {
+      await invoke("write_note", { path: tab.path, content: tab.content });
+      tab.isDirty = false;
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
+  const scheduleAutosave = (tab: NoteTab) => {
+    clearAutosaveTimer();
+    autosaveTimer = setTimeout(async () => {
+      autosaveTimer = null;
+      if (!tab.isDirty) return;
+      await persistTab(tab);
+      await fetchBacklinksFor(tab.name);
+    }, AUTOSAVE_DELAY_MS);
+  };
+
   const selectVault = async () => {
     const selected = await openDialog({ directory: true, multiple: false });
     if (selected && typeof selected === "string") {
+      clearAutosaveTimer();
       vaultPath.value = selected;
       tabs.value = [];
       activeTabPath.value = null;
@@ -90,11 +121,9 @@ export function useVault() {
       );
       if (activeIdx !== -1) {
         const current = tabs.value[activeIdx];
+        clearAutosaveTimer();
         if (current.isDirty) {
-          await invoke("write_note", {
-            path: current.path,
-            content: current.content,
-          });
+          await persistTab(current);
         }
         tabs.value.splice(activeIdx, 1, newTab);
       } else {
@@ -110,8 +139,11 @@ export function useVault() {
     const idx = tabs.value.findIndex((t) => t.path === path);
     if (idx === -1) return;
     const tab = tabs.value[idx];
+    if (tab.path === activeTabPath.value) {
+      clearAutosaveTimer();
+    }
     if (tab.isDirty) {
-      await invoke("write_note", { path: tab.path, content: tab.content });
+      await persistTab(tab);
     }
     tabs.value.splice(idx, 1);
 
@@ -225,6 +257,13 @@ export function useVault() {
   };
 
   const deleteNote = async (path: string) => {
+    if (
+      activeTabPath.value &&
+      (activeTabPath.value === path ||
+        activeTabPath.value.startsWith(`${path}/`))
+    ) {
+      clearAutosaveTimer();
+    }
     await invoke("delete_note", { path });
     tabs.value = tabs.value.filter(
       (t) => t.path !== path && !t.path.startsWith(`${path}/`),
@@ -244,14 +283,9 @@ export function useVault() {
   const saveNote = async () => {
     const tab = activeTab.value;
     if (!tab) return;
-    isSaving.value = true;
-    try {
-      await invoke("write_note", { path: tab.path, content: tab.content });
-      tab.isDirty = false;
-      await fetchBacklinksFor(tab.name);
-    } finally {
-      isSaving.value = false;
-    }
+    clearAutosaveTimer();
+    await persistTab(tab);
+    await fetchBacklinksFor(tab.name);
   };
 
   const updateContent = (newContent: string) => {
@@ -259,7 +293,23 @@ export function useVault() {
     if (tab && tab.content !== newContent) {
       tab.content = newContent;
       tab.isDirty = true;
+      scheduleAutosave(tab);
     }
+  };
+
+  const toggleChecklistItem = (lineIndex: number) => {
+    const tab = activeTab.value;
+    if (!tab) return;
+    const lines = tab.content.split("\n");
+    const line = lines[lineIndex];
+    if (line === undefined) return;
+    const match = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s.*)$/);
+    if (!match) return;
+    const toggled = match[2].trim() === "" ? "x" : " ";
+    lines[lineIndex] = `${match[1]}${toggled}${match[3]}`;
+    tab.content = lines.join("\n");
+    tab.isDirty = true;
+    scheduleAutosave(tab);
   };
 
   return {
@@ -282,6 +332,7 @@ export function useVault() {
     deleteNote,
     saveNote,
     updateContent,
+    toggleChecklistItem,
     activateTab,
     closeTab,
   };

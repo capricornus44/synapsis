@@ -42,6 +42,7 @@ const {
   deleteNote,
   saveNote,
   updateContent,
+  toggleChecklistItem,
   activateTab,
   closeTab,
 } = useVault();
@@ -600,6 +601,7 @@ onUnmounted(() => {
             <NotePreview
               :content="activeNoteContent"
               @open-note="handleWikiLinkClick"
+              @toggle-checkbox="toggleChecklistItem"
             />
           </div>
         </template>

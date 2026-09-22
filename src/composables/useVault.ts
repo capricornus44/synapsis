@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
@@ -9,20 +9,36 @@ export interface NoteInfo {
   children?: NoteInfo[];
 }
 
+export interface NoteTab {
+  path: string;
+  name: string;
+  content: string;
+  isDirty: boolean;
+}
+
 export function useVault() {
   const vaultPath = ref<string | null>(null);
   const fileTree = ref<NoteInfo[]>([]);
-  const activeNotePath = ref<string | null>(null);
-  const activeNoteName = ref<string>("");
-  const activeNoteContent = ref<string>("");
+  const tabs = ref<NoteTab[]>([]);
+  const activeTabPath = ref<string | null>(null);
   const backlinks = ref<string[]>([]);
   const isSaving = ref<boolean>(false);
-  const isDirty = ref<boolean>(false);
+
+  const activeTab = computed(
+    () => tabs.value.find((t) => t.path === activeTabPath.value) ?? null,
+  );
+  const activeNotePath = computed(() => activeTab.value?.path ?? null);
+  const activeNoteName = computed(() => activeTab.value?.name ?? "");
+  const activeNoteContent = computed(() => activeTab.value?.content ?? "");
+  const isDirty = computed(() => activeTab.value?.isDirty ?? false);
 
   const selectVault = async () => {
     const selected = await openDialog({ directory: true, multiple: false });
     if (selected && typeof selected === "string") {
       vaultPath.value = selected;
+      tabs.value = [];
+      activeTabPath.value = null;
+      backlinks.value = [];
       await refreshFileTree();
     }
   };
@@ -34,15 +50,80 @@ export function useVault() {
     });
   };
 
-  const openNote = async (noteName: string, path: string) => {
-    if (isDirty.value && activeNotePath.value) {
-      await saveNote();
+  const fetchBacklinksFor = async (noteName: string) => {
+    if (!vaultPath.value || !noteName) {
+      backlinks.value = [];
+      return;
     }
-    activeNotePath.value = path;
-    activeNoteName.value = noteName.replace(/\.md$/, "");
-    activeNoteContent.value = await invoke<string>("read_note", { path });
-    isDirty.value = false;
-    await fetchBacklinks();
+    backlinks.value = await invoke<string[]>("get_backlinks", {
+      vaultPath: vaultPath.value,
+      noteName,
+    });
+  };
+
+  const activateTab = async (path: string) => {
+    activeTabPath.value = path;
+    const tab = tabs.value.find((t) => t.path === path);
+    await fetchBacklinksFor(tab?.name ?? "");
+  };
+
+  const openNote = async (
+    noteName: string,
+    path: string,
+    options?: { newTab?: boolean },
+  ) => {
+    const existing = tabs.value.find((t) => t.path === path);
+    if (existing) {
+      await activateTab(path);
+      return;
+    }
+
+    const name = noteName.replace(/\.md$/, "");
+    const content = await invoke<string>("read_note", { path });
+    const newTab: NoteTab = { path, name, content, isDirty: false };
+
+    if (options?.newTab || tabs.value.length === 0) {
+      tabs.value.push(newTab);
+    } else {
+      const activeIdx = tabs.value.findIndex(
+        (t) => t.path === activeTabPath.value,
+      );
+      if (activeIdx !== -1) {
+        const current = tabs.value[activeIdx];
+        if (current.isDirty) {
+          await invoke("write_note", {
+            path: current.path,
+            content: current.content,
+          });
+        }
+        tabs.value.splice(activeIdx, 1, newTab);
+      } else {
+        tabs.value.push(newTab);
+      }
+    }
+
+    activeTabPath.value = path;
+    await fetchBacklinksFor(name);
+  };
+
+  const closeTab = async (path: string) => {
+    const idx = tabs.value.findIndex((t) => t.path === path);
+    if (idx === -1) return;
+    const tab = tabs.value[idx];
+    if (tab.isDirty) {
+      await invoke("write_note", { path: tab.path, content: tab.content });
+    }
+    tabs.value.splice(idx, 1);
+
+    if (activeTabPath.value === path) {
+      const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null;
+      if (next) {
+        await activateTab(next.path);
+      } else {
+        activeTabPath.value = null;
+        backlinks.value = [];
+      }
+    }
   };
 
   const findNoteByName = (tree: NoteInfo[], name: string): NoteInfo | null => {
@@ -116,20 +197,28 @@ export function useVault() {
     await invoke("rename_path", { oldPath: item.path, newPath });
 
     if (item.is_dir) {
+      tabs.value.forEach((t) => {
+        if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
+          t.path = newPath + t.path.slice(item.path.length);
+        }
+      });
       if (
-        activeNotePath.value &&
-        (activeNotePath.value === item.path ||
-          activeNotePath.value.startsWith(`${item.path}/`))
+        activeTabPath.value &&
+        (activeTabPath.value === item.path ||
+          activeTabPath.value.startsWith(`${item.path}/`))
       ) {
-        activeNotePath.value = null;
-        activeNoteName.value = "";
-        activeNoteContent.value = "";
-        backlinks.value = [];
-        isDirty.value = false;
+        activeTabPath.value =
+          newPath + activeTabPath.value.slice(item.path.length);
       }
-    } else if (activeNotePath.value === item.path) {
-      activeNotePath.value = newPath;
-      activeNoteName.value = finalName.replace(/\.md$/, "");
+    } else {
+      const tab = tabs.value.find((t) => t.path === item.path);
+      if (tab) {
+        tab.path = newPath;
+        tab.name = finalName.replace(/\.md$/, "");
+      }
+      if (activeTabPath.value === item.path) {
+        activeTabPath.value = newPath;
+      }
     }
 
     await refreshFileTree();
@@ -137,49 +226,46 @@ export function useVault() {
 
   const deleteNote = async (path: string) => {
     await invoke("delete_note", { path });
-    if (activeNotePath.value === path) {
-      activeNotePath.value = null;
-      activeNoteName.value = "";
-      activeNoteContent.value = "";
-      backlinks.value = [];
-      isDirty.value = false;
+    tabs.value = tabs.value.filter(
+      (t) => t.path !== path && !t.path.startsWith(`${path}/`),
+    );
+    if (!tabs.value.find((t) => t.path === activeTabPath.value)) {
+      const next = tabs.value[0] ?? null;
+      if (next) {
+        await activateTab(next.path);
+      } else {
+        activeTabPath.value = null;
+        backlinks.value = [];
+      }
     }
     await refreshFileTree();
   };
 
   const saveNote = async () => {
-    if (!activeNotePath.value) return;
+    const tab = activeTab.value;
+    if (!tab) return;
     isSaving.value = true;
     try {
-      await invoke("write_note", {
-        path: activeNotePath.value,
-        content: activeNoteContent.value,
-      });
-      isDirty.value = false;
-      await fetchBacklinks();
+      await invoke("write_note", { path: tab.path, content: tab.content });
+      tab.isDirty = false;
+      await fetchBacklinksFor(tab.name);
     } finally {
       isSaving.value = false;
     }
   };
 
   const updateContent = (newContent: string) => {
-    if (activeNoteContent.value !== newContent) {
-      activeNoteContent.value = newContent;
-      isDirty.value = true;
+    const tab = activeTab.value;
+    if (tab && tab.content !== newContent) {
+      tab.content = newContent;
+      tab.isDirty = true;
     }
-  };
-
-  const fetchBacklinks = async () => {
-    if (!vaultPath.value || !activeNoteName.value) return;
-    backlinks.value = await invoke<string[]>("get_backlinks", {
-      vaultPath: vaultPath.value,
-      noteName: activeNoteName.value,
-    });
   };
 
   return {
     vaultPath,
     fileTree,
+    tabs,
     activeNotePath,
     activeNoteName,
     activeNoteContent,
@@ -196,5 +282,7 @@ export function useVault() {
     deleteNote,
     saveNote,
     updateContent,
+    activateTab,
+    closeTab,
   };
 }

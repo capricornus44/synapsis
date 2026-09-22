@@ -6,6 +6,7 @@ import {
   Trash2 as Trash2Icon,
   Plus as PlusIcon,
   FolderPlus as FolderPlusIcon,
+  ExternalLink as ExternalLinkIcon,
 } from "@lucide/vue";
 
 const props = defineProps<{
@@ -19,22 +20,31 @@ const emit = defineEmits<{
   (e: "delete"): void;
   (e: "create-note"): void;
   (e: "create-folder"): void;
+  (e: "open-new-tab"): void;
   (e: "close"): void;
 }>();
 
 const menuStyle = computed(() => {
   const menuWidth = 180;
-  const menuHeight = props.item.is_dir ? 190 : 110;
+  const menuHeight = props.item.is_dir ? 190 : 150;
   const left = Math.min(props.x, window.innerWidth - menuWidth - 8);
   const top = Math.min(props.y, window.innerHeight - menuHeight - 8);
   return { top: `${top}px`, left: `${left}px` };
 });
 
-const select = (action: "rename" | "delete" | "create-note" | "create-folder") => {
+type MenuAction =
+  | "rename"
+  | "delete"
+  | "create-note"
+  | "create-folder"
+  | "open-new-tab";
+
+const select = (action: MenuAction) => {
   if (action === "rename") emit("rename");
   else if (action === "delete") emit("delete");
   else if (action === "create-note") emit("create-note");
-  else emit("create-folder");
+  else if (action === "create-folder") emit("create-folder");
+  else emit("open-new-tab");
   emit("close");
 };
 </script>
@@ -84,6 +94,15 @@ const select = (action: "rename" | "delete" | "create-note" | "create-folder") =
           <span>New Folder</span>
         </button>
       </template>
+
+      <button
+        v-else
+        @click="select('open-new-tab')"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+      >
+        <ExternalLinkIcon class="w-3.5 h-3.5" />
+        <span>Open in New Tab</span>
+      </button>
     </div>
   </div>
 </template>

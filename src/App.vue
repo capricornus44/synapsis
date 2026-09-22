@@ -5,6 +5,7 @@ import NoteEditor from "./components/NoteEditor.vue";
 import NotePreview from "./components/NotePreview.vue";
 import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
+import TabBar from "./components/TabBar.vue";
 import DeleteConfirmationDialog from "./dialogs/DeleteConfirmationDialog.vue";
 import {
   FolderOpen as FolderOpenIcon,
@@ -24,6 +25,7 @@ import {
 const {
   vaultPath,
   fileTree,
+  tabs,
   activeNotePath,
   activeNoteName,
   activeNoteContent,
@@ -40,6 +42,8 @@ const {
   deleteNote,
   saveNote,
   updateContent,
+  activateTab,
+  closeTab,
 } = useVault();
 
 type ViewMode = "split" | "edit" | "preview";
@@ -110,6 +114,10 @@ const confirmDelete = async () => {
 
 const cancelDelete = () => {
   deleteTarget.value = null;
+};
+
+const openInNewTab = (item: NoteInfo) => {
+  openNote(item.name, item.path, { newTab: true });
 };
 
 const handleContextMenu = (item: NoteInfo, event: MouseEvent) => {
@@ -431,6 +439,15 @@ onUnmounted(() => {
 
     <!-- Main Workspace Area -->
     <main class="flex-1 flex flex-col h-full bg-neutral-950 overflow-hidden">
+      <!-- Open Tabs -->
+      <TabBar
+        v-if="tabs.length > 0"
+        :tabs="tabs"
+        :active-path="activeNotePath"
+        @select="activateTab"
+        @close="closeTab"
+      />
+
       <!-- Top Workspace Toolbar -->
       <header
         class="h-14 px-6 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/50 shrink-0"
@@ -606,6 +623,7 @@ onUnmounted(() => {
       @delete="handleDeleteNote(contextMenuTarget.item)"
       @create-note="startCreateNote(contextMenuTarget.item)"
       @create-folder="startCreateFolder(contextMenuTarget.item)"
+      @open-new-tab="openInNewTab(contextMenuTarget.item)"
       @close="closeContextMenu"
     />
   </div>

@@ -16,7 +16,7 @@ export interface NoteTab {
   isDirty: boolean;
 }
 
-const AUTOSAVE_DELAY_MS = 1200;
+const AUTOSAVE_DELAY_MS = 500;
 
 export function useVault() {
   const vaultPath = ref<string | null>(null);
@@ -24,7 +24,6 @@ export function useVault() {
   const tabs = ref<NoteTab[]>([]);
   const activeTabPath = ref<string | null>(null);
   const backlinks = ref<string[]>([]);
-  const isSaving = ref<boolean>(false);
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const activeTab = computed(
@@ -33,7 +32,6 @@ export function useVault() {
   const activeNotePath = computed(() => activeTab.value?.path ?? null);
   const activeNoteName = computed(() => activeTab.value?.name ?? "");
   const activeNoteContent = computed(() => activeTab.value?.content ?? "");
-  const isDirty = computed(() => activeTab.value?.isDirty ?? false);
 
   const clearAutosaveTimer = () => {
     if (autosaveTimer !== null) {
@@ -43,13 +41,8 @@ export function useVault() {
   };
 
   const persistTab = async (tab: NoteTab) => {
-    isSaving.value = true;
-    try {
-      await invoke("write_note", { path: tab.path, content: tab.content });
-      tab.isDirty = false;
-    } finally {
-      isSaving.value = false;
-    }
+    await invoke("write_note", { path: tab.path, content: tab.content });
+    tab.isDirty = false;
   };
 
   const scheduleAutosave = (tab: NoteTab) => {
@@ -280,14 +273,6 @@ export function useVault() {
     await refreshFileTree();
   };
 
-  const saveNote = async () => {
-    const tab = activeTab.value;
-    if (!tab) return;
-    clearAutosaveTimer();
-    await persistTab(tab);
-    await fetchBacklinksFor(tab.name);
-  };
-
   const updateContent = (newContent: string) => {
     const tab = activeTab.value;
     if (tab && tab.content !== newContent) {
@@ -320,8 +305,6 @@ export function useVault() {
     activeNoteName,
     activeNoteContent,
     backlinks,
-    isSaving,
-    isDirty,
     selectVault,
     refreshFileTree,
     openNote,
@@ -330,7 +313,6 @@ export function useVault() {
     createFolder,
     renamePath,
     deleteNote,
-    saveNote,
     updateContent,
     toggleChecklistItem,
     activateTab,

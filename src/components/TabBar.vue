@@ -35,10 +35,6 @@ const emit = defineEmits<{
         ]"
       />
       <span class="truncate">{{ tab.name }}</span>
-      <span
-        v-if="tab.isDirty"
-        class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
-      ></span>
       <button
         @click.stop="emit('close', tab.path)"
         title="Close tab"

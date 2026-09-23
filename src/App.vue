@@ -12,7 +12,6 @@ import {
   Plus as PlusIcon,
   FolderPlus as FolderPlusIcon,
   Search as SearchIcon,
-  Save as SaveIcon,
   Columns2 as Columns2Icon,
   PenLine as PenLineIcon,
   Eye as EyeIcon,
@@ -30,8 +29,6 @@ const {
   activeNoteName,
   activeNoteContent,
   backlinks,
-  isSaving,
-  isDirty,
   selectVault,
   refreshFileTree,
   openNote,
@@ -40,7 +37,6 @@ const {
   createFolder,
   renamePath,
   deleteNote,
-  saveNote,
   updateContent,
   toggleChecklistItem,
   activateTab,
@@ -180,7 +176,7 @@ const submitCreate = async () => {
   cancelCreate();
 };
 
-// Keyboard shortcut handler (Cmd/Ctrl + S to save, Cmd/Ctrl + N to new note,
+// Keyboard shortcut handler (Cmd/Ctrl + N to new note,
 // Cmd/Ctrl + F to new folder, Cmd/Ctrl + R to refresh vault, Escape to close modals)
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === "Escape") {
@@ -199,12 +195,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 
   const isModifier = e.metaKey || e.ctrlKey;
-  if (isModifier && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    if (activeNotePath.value) {
-      saveNote();
-    }
-  } else if (isModifier && e.key.toLowerCase() === "n") {
+  if (isModifier && e.key.toLowerCase() === "n") {
     e.preventDefault();
     if (vaultPath.value) {
       startCreateNote();
@@ -461,14 +452,6 @@ onUnmounted(() => {
           <h2 class="font-medium text-sm text-neutral-200">
             {{ activeNoteName ? `${activeNoteName}.md` : "No note selected" }}
           </h2>
-          <span
-            v-if="isDirty"
-            class="w-2 h-2 rounded-full bg-amber-400"
-            title="Unsaved changes"
-          ></span>
-          <span v-if="isSaving" class="text-xs text-neutral-400"
-            >Saving...</span
-          >
         </div>
 
         <div v-if="activeNoteName" class="flex items-center gap-3">
@@ -516,22 +499,6 @@ onUnmounted(() => {
               <span>Preview</span>
             </button>
           </div>
-
-          <!-- Save Button -->
-          <button
-            @click="saveNote"
-            :disabled="!isDirty || isSaving"
-            :class="[
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              isDirty
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm cursor-pointer'
-                : 'bg-neutral-800 text-neutral-500 cursor-default',
-            ]"
-            title="Save Note (Ctrl/Cmd+S)"
-          >
-            <SaveIcon class="w-3.5 h-3.5" />
-            <span>Save</span>
-          </button>
         </div>
       </header>
 

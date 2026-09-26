@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { NoteInfo } from "../composables/useVault";
 import {
   Pencil as PencilIcon,
+  FolderInput as FolderInputIcon,
   Trash2 as Trash2Icon,
   Plus as PlusIcon,
   FolderPlus as FolderPlusIcon,
@@ -17,6 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "rename"): void;
+  (e: "move"): void;
   (e: "delete"): void;
   (e: "create-note"): void;
   (e: "create-folder"): void;
@@ -26,7 +28,7 @@ const emit = defineEmits<{
 
 const menuStyle = computed(() => {
   const menuWidth = 180;
-  const menuHeight = props.item.is_dir ? 190 : 150;
+  const menuHeight = props.item.is_dir ? 220 : 180;
   const left = Math.min(props.x, window.innerWidth - menuWidth - 8);
   const top = Math.min(props.y, window.innerHeight - menuHeight - 8);
   return { top: `${top}px`, left: `${left}px` };
@@ -34,6 +36,7 @@ const menuStyle = computed(() => {
 
 type MenuAction =
   | "rename"
+  | "move"
   | "delete"
   | "create-note"
   | "create-folder"
@@ -41,6 +44,7 @@ type MenuAction =
 
 const select = (action: MenuAction) => {
   if (action === "rename") emit("rename");
+  else if (action === "move") emit("move");
   else if (action === "delete") emit("delete");
   else if (action === "create-note") emit("create-note");
   else if (action === "create-folder") emit("create-folder");
@@ -61,6 +65,15 @@ const select = (action: MenuAction) => {
       @click.stop
     >
       <button
+        v-if="!item.is_dir"
+        @click="select('open-new-tab')"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+      >
+        <ExternalLinkIcon class="w-3.5 h-3.5" />
+        <span>Open in New Tab</span>
+      </button>
+
+      <button
         @click="select('rename')"
         class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
@@ -68,17 +81,17 @@ const select = (action: MenuAction) => {
         <span>Rename</span>
       </button>
 
-      <div class="my-1 border-t border-neutral-800"></div>
-
       <button
-        @click="select('delete')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
+        @click="select('move')"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
       >
-        <Trash2Icon class="w-3.5 h-3.5" />
-        <span>Delete</span>
+        <FolderInputIcon class="w-3.5 h-3.5" />
+        <span>Move to...</span>
       </button>
 
       <template v-if="item.is_dir">
+        <div class="my-1 border-t border-neutral-800"></div>
+
         <button
           @click="select('create-note')"
           class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
@@ -95,13 +108,14 @@ const select = (action: MenuAction) => {
         </button>
       </template>
 
+      <div class="my-1 border-t border-neutral-800"></div>
+
       <button
-        v-else
-        @click="select('open-new-tab')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+        @click="select('delete')"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
       >
-        <ExternalLinkIcon class="w-3.5 h-3.5" />
-        <span>Open in New Tab</span>
+        <Trash2Icon class="w-3.5 h-3.5" />
+        <span>Delete</span>
       </button>
     </div>
   </div>

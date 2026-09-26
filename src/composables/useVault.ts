@@ -280,6 +280,44 @@ export function useVault() {
     await refreshFileTree();
   };
 
+  const movePath = async (item: NoteInfo, targetDirPath: string) => {
+    if (!vaultPath.value) return;
+    const parentDir = getParentDir(item.path);
+    if (parentDir === targetDirPath) return;
+
+    const baseName = item.path.split(/[/\\]/).pop() || item.name;
+    const newPath = `${targetDirPath}/${baseName}`;
+    if (newPath === item.path) return;
+
+    await invoke("rename_path", { oldPath: item.path, newPath });
+
+    if (item.is_dir) {
+      tabs.value.forEach((t) => {
+        if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
+          t.path = newPath + t.path.slice(item.path.length);
+        }
+      });
+      if (
+        activeTabPath.value &&
+        (activeTabPath.value === item.path ||
+          activeTabPath.value.startsWith(`${item.path}/`))
+      ) {
+        activeTabPath.value =
+          newPath + activeTabPath.value.slice(item.path.length);
+      }
+    } else {
+      const tab = tabs.value.find((t) => t.path === item.path);
+      if (tab) {
+        tab.path = newPath;
+      }
+      if (activeTabPath.value === item.path) {
+        activeTabPath.value = newPath;
+      }
+    }
+
+    await refreshFileTree();
+  };
+
   const deleteNote = async (path: string) => {
     if (
       activeTabPath.value &&
@@ -345,6 +383,8 @@ export function useVault() {
     createNote,
     createFolder,
     renamePath,
+    movePath,
+    getParentDir,
     deleteNote,
     updateContent,
     toggleChecklistItem,

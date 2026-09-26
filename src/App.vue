@@ -7,6 +7,7 @@ import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import TabBar from "./components/TabBar.vue";
 import DeleteConfirmationDialog from "./dialogs/DeleteConfirmationDialog.vue";
+import MoveItemDialog from "./dialogs/MoveItemDialog.vue";
 import {
   FolderOpen as FolderOpenIcon,
   Plus as PlusIcon,
@@ -37,6 +38,7 @@ const {
   createNote,
   createFolder,
   renamePath,
+  movePath,
   deleteNote,
   updateContent,
   toggleChecklistItem,
@@ -53,6 +55,7 @@ const createMode = ref<CreateMode | null>(null);
 const createTargetFolder = ref<NoteInfo | null>(null);
 const createInputTitle = ref("");
 const deleteTarget = ref<NoteInfo | null>(null);
+const moveTarget = ref<NoteInfo | null>(null);
 const renamingPath = ref<string | null>(null);
 const contextMenuTarget = ref<{ item: NoteInfo; x: number; y: number } | null>(
   null,
@@ -112,6 +115,22 @@ const confirmDelete = async () => {
 
 const cancelDelete = () => {
   deleteTarget.value = null;
+};
+
+const startMove = (item: NoteInfo) => {
+  moveTarget.value = item;
+};
+
+const confirmMove = async (targetDirPath: string) => {
+  if (moveTarget.value) {
+    const item = moveTarget.value;
+    moveTarget.value = null;
+    await movePath(item, targetDirPath);
+  }
+};
+
+const cancelMove = () => {
+  moveTarget.value = null;
 };
 
 const openInNewTab = (item: NoteInfo) => {
@@ -183,6 +202,10 @@ const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === "Escape") {
     if (contextMenuTarget.value) {
       closeContextMenu();
+      return;
+    }
+    if (moveTarget.value) {
+      cancelMove();
       return;
     }
     if (deleteTarget.value) {
@@ -584,6 +607,15 @@ onUnmounted(() => {
       @cancel="cancelDelete"
     />
 
+    <!-- Move Item Dialog Component -->
+    <MoveItemDialog
+      :item="moveTarget"
+      :vault-path="vaultPath"
+      :file-tree="fileTree"
+      @move="confirmMove"
+      @cancel="cancelMove"
+    />
+
     <!-- Right-click Context Menu -->
     <ContextMenu
       v-if="contextMenuTarget"
@@ -591,6 +623,7 @@ onUnmounted(() => {
       :x="contextMenuTarget.x"
       :y="contextMenuTarget.y"
       @rename="startRename(contextMenuTarget.item)"
+      @move="startMove(contextMenuTarget.item)"
       @delete="handleDeleteNote(contextMenuTarget.item)"
       @create-note="startCreateNote(contextMenuTarget.item)"
       @create-folder="startCreateFolder(contextMenuTarget.item)"

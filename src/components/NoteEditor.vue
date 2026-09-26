@@ -1,18 +1,23 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { githubLight } from "@fsegurai/codemirror-theme-github-light";
+import { useTheme } from "../composables/useTheme";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
 }>();
 
+const { effectiveTheme } = useTheme();
+
 const editorContainer = ref<HTMLElement | null>(null);
 let view: EditorView | null = null;
+const themeCompartment = new Compartment();
 
 onMounted(() => {
   if (!editorContainer.value) return;
@@ -21,7 +26,9 @@ onMounted(() => {
     doc: props.modelValue,
     extensions: [
       markdown(),
-      oneDark,
+      themeCompartment.of(
+        effectiveTheme.value === "dark" ? oneDark : githubLight,
+      ),
       keymap.of(defaultKeymap),
       EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
@@ -43,6 +50,17 @@ onUnmounted(() => {
   view = null;
 });
 
+// Watch theme changes
+watch(effectiveTheme, (newTheme) => {
+  if (view) {
+    view.dispatch({
+      effects: themeCompartment.reconfigure(
+        newTheme === "dark" ? oneDark : githubLight,
+      ),
+    });
+  }
+});
+
 // Syncing external changes (e.g., when switching files)
 watch(
   () => props.modelValue,
@@ -59,7 +77,7 @@ watch(
 <template>
   <div
     ref="editorContainer"
-    class="h-full w-full border-r border-neutral-800 text-left overflow-auto bg-[#282c34]"
+    class="h-full w-full border-r border-neutral-200 dark:border-neutral-800 text-left overflow-auto bg-white dark:bg-[#282c34] transition-colors"
   ></div>
 </template>
 

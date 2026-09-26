@@ -140,7 +140,9 @@ const handleKeyDown = (e: KeyboardEvent) => {
 
 const scrollToSelected = () => {
   nextTick(() => {
-    const el = document.getElementById(`move-folder-item-${selectedIndex.value}`);
+    const el = document.getElementById(
+      `move-folder-item-${selectedIndex.value}`,
+    );
     el?.scrollIntoView({ block: "nearest" });
   });
 };
@@ -161,38 +163,44 @@ const confirmMove = (folder: FolderOption) => {
     @click.self="emit('cancel')"
   >
     <div
-      class="bg-neutral-900 border border-neutral-800 rounded-xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col max-h-[70vh]"
+      class="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col max-h-[70vh] transition-colors"
       @keydown="handleKeyDown"
     >
       <!-- Header -->
-      <div class="p-4 border-b border-neutral-800 flex items-center gap-3">
+      <div
+        class="p-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-3"
+      >
         <div
-          class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0"
+          class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0"
         >
           <FolderInputIcon class="w-5 h-5" />
         </div>
         <div class="min-w-0 flex-1">
-          <h3 class="font-semibold text-neutral-100 text-sm truncate">
+          <h3
+            class="font-semibold text-neutral-900 dark:text-neutral-100 text-sm truncate"
+          >
             Move "{{ item.name }}"
           </h3>
-          <p class="text-xs text-neutral-400 truncate">
+          <p class="text-xs text-neutral-500 dark:text-neutral-400 truncate">
             Select a destination folder in your vault
           </p>
         </div>
       </div>
 
       <!-- Search Input -->
-      <div class="p-3 border-b border-neutral-800 bg-neutral-950/40">
+      <div
+        class="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/40"
+      >
         <div class="relative">
           <SearchIcon
-            class="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            class="w-4 h-4 text-neutral-400 dark:text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
           />
           <input
             ref="inputRef"
             v-model="searchQuery"
             type="text"
             placeholder="Type folder name..."
-            class="w-full pl-9 pr-3 py-1.5 text-xs bg-neutral-900 rounded-lg border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-colors"
+            class="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-colors"
           />
         </div>
       </div>
@@ -201,7 +209,7 @@ const confirmMove = (folder: FolderOption) => {
       <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
         <div
           v-if="filteredFolders.length === 0"
-          class="p-6 text-center text-xs text-neutral-500"
+          class="p-6 text-center text-xs text-neutral-400 dark:text-neutral-500"
         >
           No matching folders found
         </div>
@@ -216,37 +224,41 @@ const confirmMove = (folder: FolderOption) => {
           :class="[
             'w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer text-left',
             selectedIndex === idx
-              ? 'bg-neutral-800 text-white'
-              : 'text-neutral-300 hover:bg-neutral-800/60 hover:text-white',
+              ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white'
+              : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-white',
           ]"
         >
           <div class="flex items-center gap-2.5 min-w-0">
             <FolderRootIcon
               v-if="folder.relativePath === '/'"
-              class="w-4 h-4 text-emerald-400 shrink-0"
+              class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
             />
             <FolderIcon
               v-else
-              class="w-4 h-4 text-neutral-400 shrink-0"
+              class="w-4 h-4 text-amber-500 dark:text-neutral-400 shrink-0"
             />
             <div class="flex flex-col min-w-0">
               <span class="font-medium truncate">{{ folder.name }}</span>
-              <span class="text-[11px] text-neutral-500 truncate">{{
-                folder.relativePath
-              }}</span>
+              <span
+                class="text-[11px] text-neutral-500 dark:text-neutral-400 truncate"
+                >{{ folder.relativePath }}</span
+              >
             </div>
           </div>
 
-          <div v-if="folder.isCurrent" class="flex items-center gap-1 shrink-0 ml-2">
+          <div
+            v-if="folder.isCurrent"
+            class="flex items-center gap-1 shrink-0 ml-2"
+          >
             <span
-              class="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 font-medium"
+              class="text-[10px] px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-700 font-medium"
             >
               current
             </span>
           </div>
           <div
             v-else-if="selectedIndex === idx"
-            class="shrink-0 text-emerald-400 text-[11px] flex items-center gap-1 ml-2"
+            class="shrink-0 text-emerald-600 dark:text-emerald-400 text-[11px] flex items-center gap-1 ml-2"
           >
             <span>Move here</span>
             <CheckIcon class="w-3.5 h-3.5" />
@@ -256,19 +268,28 @@ const confirmMove = (folder: FolderOption) => {
 
       <!-- Footer -->
       <div
-        class="p-3 border-t border-neutral-800 bg-neutral-900/60 flex items-center justify-between text-[11px] text-neutral-500"
+        class="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400"
       >
         <span>
-          <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 text-[10px]">↑</kbd>
-          <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 text-[10px] ml-1">↓</kbd>
+          <kbd
+            class="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-400 text-[10px]"
+            >↑</kbd
+          >
+          <kbd
+            class="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-400 text-[10px] ml-1"
+            >↓</kbd
+          >
           to navigate,
-          <kbd class="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 text-[10px] ml-1">Enter</kbd>
+          <kbd
+            class="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-400 text-[10px] ml-1"
+            >Enter</kbd
+          >
           to select
         </span>
         <button
           type="button"
           @click="emit('cancel')"
-          class="px-2.5 py-1 text-xs rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
+          class="px-2.5 py-1 text-xs rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors cursor-pointer"
         >
           Cancel
         </button>

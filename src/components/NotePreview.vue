@@ -14,7 +14,7 @@ const processWikiLinks = (text: string) => {
   const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
   return text.replace(wikiLinkRegex, (_, target, alias) => {
     const label = alias ? alias : target;
-    return `<a href="#" class="wikilink text-emerald-400 font-medium underline underline-offset-2 hover:text-emerald-300 transition-colors" data-note="${target.trim()}">${label.trim()}</a>`;
+    return `<a href="#" class="wikilink text-emerald-600 dark:text-emerald-400 font-medium underline underline-offset-2 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors" data-note="${target.trim()}">${label.trim()}</a>`;
   });
 };
 
@@ -22,15 +22,13 @@ const processWikiLinks = (text: string) => {
 // checkboxes can be mapped back to the line marked toggles in the raw markdown.
 const getChecklistLines = (text: string): number[] => {
   const taskLineRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s/;
-  return text
-    .split("\n")
-    .reduce<number[]>((lines, line, index) => {
-      if (taskLineRegex.test(line)) lines.push(index);
-      return lines;
-    }, []);
+  return text.split("\n").reduce<number[]>((lines, line, index) => {
+    if (taskLineRegex.test(line)) lines.push(index);
+    return lines;
+  }, []);
 };
 
-// marked renders task checkboxes as `<input disabled type="checkbox">`; swap in
+// marked renders task checkboxes as `<input disabled type=\"checkbox\">`; swap in
 // a data-line index (so clicks can be mapped to source) and drop `disabled`.
 const makeChecklistInteractive = (html: string, lineNumbers: number[]) => {
   let i = 0;
@@ -82,7 +80,7 @@ const handleHtmlClick = (e: MouseEvent) => {
   <div
     @click="handleHtmlClick"
     v-html="parsedHtml"
-    class="prose prose-invert max-w-none h-full w-full p-8 overflow-auto text-left bg-neutral-900 text-neutral-200"
+    class="prose dark:prose-invert max-w-none h-full w-full p-8 overflow-auto text-left bg-neutral-50/50 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 transition-colors"
   ></div>
 </template>
 
@@ -100,14 +98,19 @@ div :deep(input[type="checkbox"]) {
   margin-right: 0.6em;
   vertical-align: -0.22em;
   flex-shrink: 0;
-  border: 2px solid #525252;
+  border: 2px solid #cbd5e1;
   border-radius: 0.35em;
-  background-color: #262626;
+  background-color: #f1f5f9;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
     transform 0.1s ease;
+}
+
+:global(.dark) div :deep(input[type="checkbox"]) {
+  border-color: #525252;
+  background-color: #262626;
 }
 
 div :deep(input[type="checkbox"]:hover) {

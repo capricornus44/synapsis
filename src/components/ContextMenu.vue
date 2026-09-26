@@ -60,14 +60,14 @@ const select = (action: MenuAction) => {
     @contextmenu.prevent="emit('close')"
   >
     <div
-      class="absolute min-w-[170px] bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl py-1 text-xs"
+      class="absolute min-w-[170px] bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg shadow-2xl py-1 text-xs text-neutral-700 dark:text-neutral-300 transition-colors"
       :style="menuStyle"
       @click.stop
     >
       <button
         v-if="!item.is_dir"
         @click="select('open-new-tab')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
       >
         <ExternalLinkIcon class="w-3.5 h-3.5" />
         <span>Open in New Tab</span>
@@ -75,7 +75,7 @@ const select = (action: MenuAction) => {
 
       <button
         @click="select('rename')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
       >
         <PencilIcon class="w-3.5 h-3.5" />
         <span>Rename</span>
@@ -83,36 +83,40 @@ const select = (action: MenuAction) => {
 
       <button
         @click="select('move')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
       >
         <FolderInputIcon class="w-3.5 h-3.5" />
         <span>Move to...</span>
       </button>
 
       <template v-if="item.is_dir">
-        <div class="my-1 border-t border-neutral-800"></div>
+        <div
+          class="my-1 border-t border-neutral-200 dark:border-neutral-800"
+        ></div>
 
         <button
           @click="select('create-note')"
-          class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+          class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
         >
           <PlusIcon class="w-3.5 h-3.5" />
           <span>New Note</span>
         </button>
         <button
           @click="select('create-folder')"
-          class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+          class="w-full flex items-center gap-2 px-3 py-1.5 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
         >
           <FolderPlusIcon class="w-3.5 h-3.5" />
           <span>New Folder</span>
         </button>
       </template>
 
-      <div class="my-1 border-t border-neutral-800"></div>
+      <div
+        class="my-1 border-t border-neutral-200 dark:border-neutral-800"
+      ></div>
 
       <button
         @click="select('delete')"
-        class="w-full flex items-center gap-2 px-3 py-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
+        class="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-300 transition-colors cursor-pointer"
       >
         <Trash2Icon class="w-3.5 h-3.5" />
         <span>Delete</span>

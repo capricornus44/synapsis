@@ -30,11 +30,14 @@ const emit = defineEmits<{
     >
       <FileTextIcon
         :class="[
-          'w-3.5 h-3.5 shrink-0',
+          'w-3.5 h-3.5 shrink-0 transition-colors',
           tab.path === activePath
-            ? 'text-emerald-500 dark:text-emerald-400'
+            ? ''
             : 'text-neutral-400 dark:text-neutral-500',
         ]"
+        :style="
+          tab.path === activePath ? { color: 'var(--color-accent)' } : undefined
+        "
       />
       <span class="truncate">{{ tab.name }}</span>
       <button

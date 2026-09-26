@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import type { NoteInfo } from "../composables/useVault";
-import {
-  Folder as FolderIcon,
-  FolderOpen as FolderOpenIcon,
-  FileText as FileTextIcon,
-  ChevronRight as ChevronRightIcon,
-  ChevronDown as ChevronDownIcon,
-} from "@lucide/vue";
+import { ChevronRight as ChevronRightIcon } from "@lucide/vue";
 
 const props = defineProps<{
   item: NoteInfo;
@@ -88,13 +82,11 @@ const cancelRename = () => {
     >
       <div class="flex items-center gap-1.5 min-w-0 truncate flex-1">
         <template v-if="props.item.is_dir">
-          <component
-            :is="isOpen ? ChevronDownIcon : ChevronRightIcon"
-            class="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 shrink-0"
-          />
-          <component
-            :is="isOpen ? FolderOpenIcon : FolderIcon"
-            class="w-4 h-4 text-amber-500 dark:text-amber-400/80 shrink-0"
+          <ChevronRightIcon
+            :class="[
+              'w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 shrink-0 transition-transform duration-150',
+              isOpen ? 'rotate-90' : '',
+            ]"
           />
           <input
             v-if="isRenaming"
@@ -105,16 +97,13 @@ const cancelRename = () => {
             @keydown.enter="commitRename"
             @keydown.escape="cancelRename"
             @blur="commitRename"
-            class="w-full min-w-0 bg-white dark:bg-neutral-950 border border-emerald-500 rounded px-1 py-0.5 text-xs text-neutral-900 dark:text-white focus:outline-none"
+            class="w-full min-w-0 bg-white dark:bg-neutral-950 border border-accent rounded px-1 py-0.5 text-xs text-neutral-900 dark:text-white focus:outline-none"
           />
           <span v-else class="truncate">{{ props.item.name }}</span>
         </template>
 
         <template v-else>
           <span class="w-3.5 shrink-0"></span>
-          <FileTextIcon
-            class="w-4 h-4 text-emerald-600 dark:text-emerald-400/70 shrink-0"
-          />
           <input
             v-if="isRenaming"
             ref="renameInputRef"
@@ -124,7 +113,7 @@ const cancelRename = () => {
             @keydown.enter="commitRename"
             @keydown.escape="cancelRename"
             @blur="commitRename"
-            class="w-full min-w-0 bg-white dark:bg-neutral-950 border border-emerald-500 rounded px-1 py-0.5 text-xs text-neutral-900 dark:text-white focus:outline-none"
+            class="w-full min-w-0 bg-white dark:bg-neutral-950 border border-accent rounded px-1 py-0.5 text-xs text-neutral-900 dark:text-white focus:outline-none"
           />
           <span v-else class="truncate">{{
             props.item.name.replace(/\.md$/, "")

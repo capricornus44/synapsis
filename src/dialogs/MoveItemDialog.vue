@@ -3,8 +3,6 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { NoteInfo } from "../composables/useVault";
 import {
   FolderInput as FolderInputIcon,
-  Folder as FolderIcon,
-  FolderRoot as FolderRootIcon,
   Search as SearchIcon,
   Check as CheckIcon,
 } from "@lucide/vue";
@@ -171,7 +169,7 @@ const confirmMove = (folder: FolderOption) => {
         class="p-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-3"
       >
         <div
-          class="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0"
+          class="w-9 h-9 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0"
         >
           <FolderInputIcon class="w-5 h-5" />
         </div>
@@ -200,7 +198,7 @@ const confirmMove = (folder: FolderOption) => {
             v-model="searchQuery"
             type="text"
             placeholder="Type folder name..."
-            class="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-colors"
+            class="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-500 focus:outline-none focus:border-accent transition-colors"
           />
         </div>
       </div>
@@ -229,14 +227,6 @@ const confirmMove = (folder: FolderOption) => {
           ]"
         >
           <div class="flex items-center gap-2.5 min-w-0">
-            <FolderRootIcon
-              v-if="folder.relativePath === '/'"
-              class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"
-            />
-            <FolderIcon
-              v-else
-              class="w-4 h-4 text-amber-500 dark:text-neutral-400 shrink-0"
-            />
             <div class="flex flex-col min-w-0">
               <span class="font-medium truncate">{{ folder.name }}</span>
               <span
@@ -258,7 +248,7 @@ const confirmMove = (folder: FolderOption) => {
           </div>
           <div
             v-else-if="selectedIndex === idx"
-            class="shrink-0 text-emerald-600 dark:text-emerald-400 text-[11px] flex items-center gap-1 ml-2"
+            class="shrink-0 text-accent text-[11px] flex items-center gap-1 ml-2"
           >
             <span>Move here</span>
             <CheckIcon class="w-3.5 h-3.5" />

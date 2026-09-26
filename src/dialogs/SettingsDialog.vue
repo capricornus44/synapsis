@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useTheme, type ThemeMode } from "../composables/useTheme";
 import {
   Palette as PaletteIcon,
   Search as SearchIcon,
   X as XIcon,
   ChevronDown as ChevronDownIcon,
+  Check as CheckIcon,
+  RotateCcw as RotateCcwIcon,
   SlidersHorizontal as SlidersIcon,
   FileText as FileTextIcon,
   FolderCog as FolderCogIcon,
@@ -21,7 +23,14 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const { themeMode, setTheme } = useTheme();
+const {
+  themeMode,
+  accentColor,
+  DEFAULT_ACCENT,
+  setTheme,
+  setAccentColor,
+  resetAccentColor,
+} = useTheme();
 
 const activeTab = ref<"appearance" | "general" | "editor">("appearance");
 const searchQuery = ref("");
@@ -32,9 +41,76 @@ const themeOptions: { value: ThemeMode; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-const handleThemeChange = (e: Event) => {
-  const target = e.target as HTMLSelectElement;
-  setTheme(target.value as ThemeMode);
+const isThemeMenuOpen = ref(false);
+const highlightedIndex = ref(0);
+
+const currentThemeLabel = computed(
+  () => themeOptions.find((opt) => opt.value === themeMode.value)?.label,
+);
+
+const openThemeMenu = () => {
+  highlightedIndex.value = Math.max(
+    0,
+    themeOptions.findIndex((opt) => opt.value === themeMode.value),
+  );
+  isThemeMenuOpen.value = true;
+};
+
+const toggleThemeMenu = () => {
+  if (isThemeMenuOpen.value) {
+    isThemeMenuOpen.value = false;
+  } else {
+    openThemeMenu();
+  }
+};
+
+const selectTheme = (mode: ThemeMode) => {
+  setTheme(mode);
+  isThemeMenuOpen.value = false;
+};
+
+// Mirrors native <select> keyboard behaviour; focus stays on the trigger button.
+const handleThemeMenuKeydown = (e: KeyboardEvent) => {
+  const count = themeOptions.length;
+
+  if (!isThemeMenuOpen.value) {
+    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
+      e.preventDefault();
+      openThemeMenu();
+    }
+    return;
+  }
+
+  switch (e.key) {
+    case "ArrowDown":
+      e.preventDefault();
+      highlightedIndex.value = (highlightedIndex.value + 1) % count;
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      highlightedIndex.value = (highlightedIndex.value - 1 + count) % count;
+      break;
+    case "Home":
+      e.preventDefault();
+      highlightedIndex.value = 0;
+      break;
+    case "End":
+      e.preventDefault();
+      highlightedIndex.value = count - 1;
+      break;
+    case "Enter":
+    case " ":
+      e.preventDefault();
+      selectTheme(themeOptions[highlightedIndex.value].value);
+      break;
+    case "Escape":
+      e.stopPropagation();
+      isThemeMenuOpen.value = false;
+      break;
+    case "Tab":
+      isThemeMenuOpen.value = false;
+      break;
+  }
 };
 </script>
 
@@ -95,7 +171,7 @@ const handleThemeChange = (e: Event) => {
               v-model="searchQuery"
               type="text"
               placeholder="Search settings..."
-              class="w-full pl-8 pr-2.5 py-1 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-md text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:border-emerald-500"
+              class="w-full pl-8 pr-2.5 py-1 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-md text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:border-neutral-400 dark:focus:border-neutral-600"
             />
           </div>
 
@@ -117,7 +193,10 @@ const handleThemeChange = (e: Event) => {
                       : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 hover:text-neutral-900 dark:hover:text-neutral-200',
                   ]"
                 >
-                  <PaletteIcon class="w-3.5 h-3.5 text-emerald-500" />
+                  <PaletteIcon
+                    class="w-3.5 h-3.5"
+                    :style="{ color: accentColor }"
+                  />
                   <span>Appearance</span>
                 </button>
 
@@ -160,6 +239,17 @@ const handleThemeChange = (e: Event) => {
         <!-- Right Content Area -->
         <main class="flex-1 p-6 overflow-y-auto">
           <div v-if="activeTab === 'appearance'" class="space-y-6">
+            <div>
+              <h2
+                class="text-base font-semibold text-neutral-900 dark:text-white"
+              >
+                Appearance
+              </h2>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                Customize look and feel of Synapsis
+              </p>
+            </div>
+
             <!-- Base Colour Scheme Row -->
             <div
               class="flex items-center justify-between py-3.5 border-b border-neutral-200 dark:border-neutral-800"
@@ -175,24 +265,103 @@ const handleThemeChange = (e: Event) => {
                 </div>
               </div>
 
-              <!-- Select Box -->
-              <div class="relative shrink-0">
-                <select
-                  :value="themeMode"
-                  @change="handleThemeChange"
-                  class="appearance-none bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-white text-xs rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-xs font-medium"
+              <!-- Select Box (custom, so the highlight follows the accent colour) -->
+              <div class="relative shrink-0" @keydown="handleThemeMenuKeydown">
+                <button
+                  @click="toggleThemeMenu"
+                  aria-haspopup="listbox"
+                  :aria-expanded="isThemeMenuOpen"
+                  class="relative bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-white text-xs rounded-lg pl-3 pr-8 py-1.5 focus:outline-none cursor-pointer shadow-xs font-medium"
                 >
-                  <option
-                    v-for="opt in themeOptions"
-                    :key="opt.value"
-                    :value="opt.value"
+                  {{ currentThemeLabel }}
+                  <ChevronDownIcon
+                    class="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  />
+                </button>
+
+                <template v-if="isThemeMenuOpen">
+                  <div
+                    class="fixed inset-0 z-10"
+                    @click="isThemeMenuOpen = false"
+                  ></div>
+                  <div
+                    role="listbox"
+                    class="absolute right-0 top-full mt-1 z-20 min-w-40 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-xl"
                   >
-                    {{ opt.label }}
-                  </option>
-                </select>
-                <ChevronDownIcon
-                  class="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                />
+                    <button
+                      v-for="(opt, idx) in themeOptions"
+                      :key="opt.value"
+                      role="option"
+                      tabindex="-1"
+                      :aria-selected="opt.value === themeMode"
+                      @mousedown.prevent
+                      @mouseenter="highlightedIndex = idx"
+                      @click="selectTheme(opt.value)"
+                      :class="[
+                        'w-full flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-left font-medium cursor-pointer',
+                        highlightedIndex === idx
+                          ? 'bg-accent text-white'
+                          : 'text-neutral-800 dark:text-neutral-100',
+                      ]"
+                    >
+                      <CheckIcon
+                        class="w-3.5 h-3.5 shrink-0"
+                        :class="opt.value === themeMode ? '' : 'invisible'"
+                      />
+                      <span>{{ opt.label }}</span>
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Accent Colour Row -->
+            <div
+              class="flex items-center justify-between py-3.5 border-b border-neutral-200 dark:border-neutral-800"
+            >
+              <div class="space-y-0.5 pr-4">
+                <div
+                  class="text-xs font-semibold text-neutral-900 dark:text-neutral-100"
+                >
+                  Accent colour
+                </div>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400">
+                  Choose the accent colour used throughout the app.
+                </div>
+              </div>
+
+              <!-- Accent Color Controls: Reset + Color Picker Swatch -->
+              <div class="flex items-center gap-2.5 shrink-0">
+                <button
+                  v-if="
+                    accentColor.toLowerCase() !== DEFAULT_ACCENT.toLowerCase()
+                  "
+                  @click="resetAccentColor"
+                  class="p-1 rounded-md text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                  title="Reset to default colour"
+                >
+                  <RotateCcwIcon class="w-3.5 h-3.5" />
+                </button>
+
+                <!-- Native Color Palette Picker Swatch -->
+                <label
+                  class="relative inline-flex items-center justify-center cursor-pointer group"
+                  title="Choose accent colour"
+                >
+                  <input
+                    type="color"
+                    :value="accentColor"
+                    @input="
+                      (e) =>
+                        setAccentColor((e.target as HTMLInputElement).value)
+                    "
+                    class="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                  />
+                  <div
+                    class="w-6 h-6 rounded-full border border-neutral-300 dark:border-neutral-700 shadow-sm transition-transform group-hover:scale-110 group-active:scale-95 ring-2 ring-transparent group-hover:ring-neutral-400/40"
+                    :style="{ backgroundColor: accentColor }"
+                  ></div>
+                </label>
               </div>
             </div>
           </div>

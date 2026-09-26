@@ -14,7 +14,7 @@ const processWikiLinks = (text: string) => {
   const wikiLinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
   return text.replace(wikiLinkRegex, (_, target, alias) => {
     const label = alias ? alias : target;
-    return `<a href="#" class="wikilink text-emerald-600 dark:text-emerald-400 font-medium underline underline-offset-2 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors" data-note="${target.trim()}">${label.trim()}</a>`;
+    return `<a href="#" class="wikilink font-medium underline underline-offset-2 transition-colors" style="color: var(--color-accent);" data-note="${target.trim()}">${label.trim()}</a>`;
   });
 };
 
@@ -114,7 +114,7 @@ div :deep(input[type="checkbox"]) {
 }
 
 div :deep(input[type="checkbox"]:hover) {
-  border-color: #34d399;
+  border-color: var(--color-accent);
   transform: scale(1.08);
 }
 
@@ -123,8 +123,8 @@ div :deep(input[type="checkbox"]:active) {
 }
 
 div :deep(input[type="checkbox"]:checked) {
-  background-color: #10b981;
-  border-color: #10b981;
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center;

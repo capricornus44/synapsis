@@ -2,6 +2,34 @@
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --color-accent: #7c3aed;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+}
+
+/* Editor palette, consumed by src/editor/theme.ts */
+:root {
+  --editor-bg: #ffffff;
+  --editor-fg: #262626;
+  --editor-muted: #a3a3a3;
+  --editor-heading: #171717;
+  --editor-code: #be185d;
+  --editor-active-line: transparent;
+  --editor-selection: color-mix(in oklab, var(--color-accent) 25%, transparent);
+}
+
+html.dark {
+  --editor-bg: #171717;
+  --editor-fg: #d4d4d4;
+  --editor-muted: #737373;
+  --editor-heading: #fafafa;
+  --editor-code: #f9a8d4;
+  --editor-selection: color-mix(in oklab, var(--color-accent) 35%, transparent);
+}
+
 html,
 body,
 #app {

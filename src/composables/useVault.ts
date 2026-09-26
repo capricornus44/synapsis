@@ -17,6 +17,7 @@ export interface NoteTab {
 }
 
 const AUTOSAVE_DELAY_MS = 500;
+const STORAGE_KEY_LAST_VAULT = "synapsis:last_vault";
 
 export function useVault() {
   const vaultPath = ref<string | null>(null);
@@ -55,23 +56,48 @@ export function useVault() {
     }, AUTOSAVE_DELAY_MS);
   };
 
+  const openVaultPath = async (path: string) => {
+    clearAutosaveTimer();
+    tabs.value = [];
+    activeTabPath.value = null;
+    backlinks.value = [];
+
+    try {
+      const tree = await invoke<NoteInfo[]>("open_vault", { path });
+      vaultPath.value = path;
+      fileTree.value = tree;
+      localStorage.setItem(STORAGE_KEY_LAST_VAULT, path);
+    } catch (err) {
+      console.error("Failed to open vault at path:", path, err);
+      vaultPath.value = null;
+      fileTree.value = [];
+      localStorage.removeItem(STORAGE_KEY_LAST_VAULT);
+    }
+  };
+
   const selectVault = async () => {
     const selected = await openDialog({ directory: true, multiple: false });
     if (selected && typeof selected === "string") {
-      clearAutosaveTimer();
-      vaultPath.value = selected;
-      tabs.value = [];
-      activeTabPath.value = null;
-      backlinks.value = [];
-      await refreshFileTree();
+      await openVaultPath(selected);
+    }
+  };
+
+  const initVault = async () => {
+    const savedPath = localStorage.getItem(STORAGE_KEY_LAST_VAULT);
+    if (savedPath) {
+      await openVaultPath(savedPath);
     }
   };
 
   const refreshFileTree = async () => {
     if (!vaultPath.value) return;
-    fileTree.value = await invoke<NoteInfo[]>("open_vault", {
-      path: vaultPath.value,
-    });
+    try {
+      fileTree.value = await invoke<NoteInfo[]>("open_vault", {
+        path: vaultPath.value,
+      });
+    } catch (err) {
+      console.error("Failed to refresh file tree:", err);
+    }
   };
 
   const fetchBacklinksFor = async (noteName: string) => {
@@ -79,10 +105,15 @@ export function useVault() {
       backlinks.value = [];
       return;
     }
-    backlinks.value = await invoke<string[]>("get_backlinks", {
-      vaultPath: vaultPath.value,
-      noteName,
-    });
+    try {
+      backlinks.value = await invoke<string[]>("get_backlinks", {
+        vaultPath: vaultPath.value,
+        noteName,
+      });
+    } catch (err) {
+      console.error("Failed to fetch backlinks:", err);
+      backlinks.value = [];
+    }
   };
 
   const activateTab = async (path: string) => {
@@ -305,7 +336,9 @@ export function useVault() {
     activeNoteName,
     activeNoteContent,
     backlinks,
+    initVault,
     selectVault,
+    openVaultPath,
     refreshFileTree,
     openNote,
     openNoteByName,

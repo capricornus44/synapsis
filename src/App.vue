@@ -29,6 +29,7 @@ const {
   activeNoteName,
   activeNoteContent,
   backlinks,
+  initVault,
   selectVault,
   refreshFileTree,
   openNote,
@@ -215,6 +216,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
+  initVault();
 });
 
 onUnmounted(() => {

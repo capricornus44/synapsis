@@ -9,11 +9,23 @@ export interface NoteInfo {
   children?: NoteInfo[];
 }
 
+export type TabViewMode = "edit" | "preview";
+
 export interface NoteTab {
+  id: string;
   path: string;
   name: string;
   content: string;
   isDirty: boolean;
+  viewMode: TabViewMode;
+  /** Shared id for tabs created via Cmd+Click split; null = independent */
+  linkGroupId: string | null;
+}
+
+export interface WorkspacePane {
+  id: string;
+  tabs: NoteTab[];
+  activeTabId: string | null;
 }
 
 const AUTOSAVE_DELAY_MS = 500;
@@ -22,17 +34,56 @@ const STORAGE_KEY_LAST_VAULT = "synapsis:last_vault";
 export function useVault() {
   const vaultPath = ref<string | null>(null);
   const fileTree = ref<NoteInfo[]>([]);
-  const tabs = ref<NoteTab[]>([]);
-  const activeTabPath = ref<string | null>(null);
+  const panes = ref<WorkspacePane[]>([]);
+  const activePaneId = ref<string | null>(null);
   const backlinks = ref<string[]>([]);
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const activeTab = computed(
-    () => tabs.value.find((t) => t.path === activeTabPath.value) ?? null,
+  const createId = () => crypto.randomUUID();
+
+  const createEmptyPane = (): WorkspacePane => ({
+    id: createId(),
+    tabs: [],
+    activeTabId: null,
+  });
+
+  const findTabById = (tabId: string) => {
+    for (const pane of panes.value) {
+      const tab = pane.tabs.find((t) => t.id === tabId);
+      if (tab) return { pane, tab };
+    }
+    return null;
+  };
+
+  const getActivePane = (): WorkspacePane => {
+    if (!panes.value.length) {
+      const pane = createEmptyPane();
+      panes.value.push(pane);
+      activePaneId.value = pane.id;
+    }
+    if (!activePaneId.value) {
+      activePaneId.value = panes.value[0].id;
+    }
+    return panes.value.find((p) => p.id === activePaneId.value) ?? panes.value[0];
+  };
+
+  const activePane = computed(
+    () => panes.value.find((p) => p.id === activePaneId.value) ?? null,
   );
+
+  const activeTab = computed(() => {
+    const pane = activePane.value;
+    if (!pane?.activeTabId) return null;
+    return pane.tabs.find((t) => t.id === pane.activeTabId) ?? null;
+  });
+
   const activeNotePath = computed(() => activeTab.value?.path ?? null);
   const activeNoteName = computed(() => activeTab.value?.name ?? "");
   const activeNoteContent = computed(() => activeTab.value?.content ?? "");
+
+  const hasOpenNotes = computed(() =>
+    panes.value.some((pane) => pane.tabs.length > 0),
+  );
 
   const clearAutosaveTimer = () => {
     if (autosaveTimer !== null) {
@@ -56,11 +107,16 @@ export function useVault() {
     }, AUTOSAVE_DELAY_MS);
   };
 
-  const openVaultPath = async (path: string) => {
+  const resetWorkspace = () => {
     clearAutosaveTimer();
-    tabs.value = [];
-    activeTabPath.value = null;
+    const pane = createEmptyPane();
+    panes.value = [pane];
+    activePaneId.value = pane.id;
     backlinks.value = [];
+  };
+
+  const openVaultPath = async (path: string) => {
+    resetWorkspace();
 
     try {
       const tree = await invoke<NoteInfo[]>("open_vault", { path });
@@ -83,6 +139,7 @@ export function useVault() {
   };
 
   const initVault = async () => {
+    resetWorkspace();
     const savedPath = localStorage.getItem(STORAGE_KEY_LAST_VAULT);
     if (savedPath) {
       await openVaultPath(savedPath);
@@ -116,70 +173,216 @@ export function useVault() {
     }
   };
 
-  const activateTab = async (path: string) => {
-    activeTabPath.value = path;
-    const tab = tabs.value.find((t) => t.path === path);
-    await fetchBacklinksFor(tab?.name ?? "");
+  const activatePane = (paneId: string) => {
+    activePaneId.value = paneId;
+  };
+
+  const activateTab = async (tabId: string, paneId?: string) => {
+    const found = paneId
+      ? {
+          pane: panes.value.find((p) => p.id === paneId),
+          tab: panes.value
+            .find((p) => p.id === paneId)
+            ?.tabs.find((t) => t.id === tabId),
+        }
+      : findTabById(tabId);
+
+    if (!found?.pane || !found.tab) return;
+
+    activePaneId.value = found.pane.id;
+    found.pane.activeTabId = tabId;
+    await fetchBacklinksFor(found.tab.name);
+  };
+
+  const findExistingContent = (path: string) => {
+    for (const pane of panes.value) {
+      const tab = pane.tabs.find((t) => t.path === path);
+      if (tab) return tab;
+    }
+    return null;
   };
 
   const openNote = async (
     noteName: string,
     path: string,
-    options?: { newTab?: boolean },
+    options?: {
+      newTab?: boolean;
+      viewMode?: TabViewMode;
+      paneId?: string;
+      linkGroupId?: string | null;
+    },
   ) => {
-    const existing = tabs.value.find((t) => t.path === path);
-    if (existing) {
-      await activateTab(path);
-      return;
-    }
+    const pane = options?.paneId
+      ? (panes.value.find((p) => p.id === options.paneId) ?? getActivePane())
+      : getActivePane();
 
-    const name = noteName.replace(/\.md$/, "");
-    const content = await invoke<string>("read_note", { path });
-    const newTab: NoteTab = { path, name, content, isDirty: false };
-
-    if (options?.newTab || tabs.value.length === 0) {
-      tabs.value.push(newTab);
-    } else {
-      const activeIdx = tabs.value.findIndex(
-        (t) => t.path === activeTabPath.value,
-      );
-      if (activeIdx !== -1) {
-        const current = tabs.value[activeIdx];
-        clearAutosaveTimer();
-        if (current.isDirty) {
-          await persistTab(current);
-        }
-        tabs.value.splice(activeIdx, 1, newTab);
-      } else {
-        tabs.value.push(newTab);
+    if (!options?.newTab) {
+      const existing = pane.tabs.find((t) => t.path === path);
+      if (existing) {
+        await activateTab(existing.id, pane.id);
+        return;
       }
     }
 
-    activeTabPath.value = path;
-    await fetchBacklinksFor(name);
+    try {
+      const name = noteName.replace(/\.md$/, "");
+      const existingSamePath = findExistingContent(path);
+      const content = existingSamePath
+        ? existingSamePath.content
+        : await invoke<string>("read_note", { path });
+      const newTab: NoteTab = {
+        id: createId(),
+        path,
+        name,
+        content,
+        isDirty: existingSamePath?.isDirty ?? false,
+        viewMode: options?.viewMode ?? "edit",
+        linkGroupId: options?.linkGroupId ?? null,
+      };
+
+      if (options?.newTab || pane.tabs.length === 0) {
+        pane.tabs.push(newTab);
+      } else {
+        const activeIdx = pane.tabs.findIndex((t) => t.id === pane.activeTabId);
+        if (activeIdx !== -1) {
+          const current = pane.tabs[activeIdx];
+          clearAutosaveTimer();
+          if (current.isDirty) {
+            await persistTab(current);
+          }
+          const previousLinkGroupId = current.linkGroupId;
+          pane.tabs.splice(activeIdx, 1, newTab);
+          if (previousLinkGroupId) {
+            clearOrphanedLinkGroups(previousLinkGroupId);
+          }
+        } else {
+          pane.tabs.push(newTab);
+        }
+      }
+
+      activePaneId.value = pane.id;
+      pane.activeTabId = newTab.id;
+      await fetchBacklinksFor(name);
+    } catch (err) {
+      console.error("Failed to open note:", path, err);
+    }
   };
 
-  const closeTab = async (path: string) => {
-    const idx = tabs.value.findIndex((t) => t.path === path);
-    if (idx === -1) return;
-    const tab = tabs.value[idx];
-    if (tab.path === activeTabPath.value) {
+  const closeTab = async (paneId: string, tabId: string) => {
+    const paneIdx = panes.value.findIndex((p) => p.id === paneId);
+    if (paneIdx === -1) return;
+    const pane = panes.value[paneIdx];
+    const tabIdx = pane.tabs.findIndex((t) => t.id === tabId);
+    if (tabIdx === -1) return;
+
+    const tab = pane.tabs[tabIdx];
+    if (pane.activeTabId === tabId) {
       clearAutosaveTimer();
     }
     if (tab.isDirty) {
       await persistTab(tab);
     }
-    tabs.value.splice(idx, 1);
+    const closedLinkGroupId = tab.linkGroupId;
+    pane.tabs.splice(tabIdx, 1);
 
-    if (activeTabPath.value === path) {
-      const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null;
-      if (next) {
-        await activateTab(next.path);
+    if (closedLinkGroupId) {
+      clearOrphanedLinkGroups(closedLinkGroupId);
+    }
+
+    if (pane.tabs.length === 0) {
+      if (panes.value.length > 1) {
+        panes.value.splice(paneIdx, 1);
+        if (activePaneId.value === paneId) {
+          const nextPane =
+            panes.value[paneIdx] ?? panes.value[paneIdx - 1] ?? null;
+          if (nextPane) {
+            activePaneId.value = nextPane.id;
+            if (nextPane.activeTabId) {
+              const nextTab = nextPane.tabs.find(
+                (t) => t.id === nextPane.activeTabId,
+              );
+              await fetchBacklinksFor(nextTab?.name ?? "");
+            } else {
+              backlinks.value = [];
+            }
+          }
+        }
       } else {
-        activeTabPath.value = null;
+        pane.activeTabId = null;
         backlinks.value = [];
       }
+      return;
     }
+
+    if (pane.activeTabId === tabId) {
+      const nextTab = pane.tabs[tabIdx] ?? pane.tabs[tabIdx - 1] ?? null;
+      pane.activeTabId = nextTab?.id ?? null;
+      if (activePaneId.value === paneId) {
+        await fetchBacklinksFor(nextTab?.name ?? "");
+      }
+    }
+  };
+
+  const forEachTab = (fn: (tab: NoteTab) => void) => {
+    panes.value.forEach((pane) => pane.tabs.forEach(fn));
+  };
+
+  const getLinkedTabs = (linkGroupId: string): NoteTab[] => {
+    const linked: NoteTab[] = [];
+    forEachTab((t) => {
+      if (t.linkGroupId === linkGroupId) linked.push(t);
+    });
+    return linked;
+  };
+
+  const clearOrphanedLinkGroups = (linkGroupId: string) => {
+    const remaining = getLinkedTabs(linkGroupId);
+    if (remaining.length <= 1) {
+      remaining.forEach((t) => {
+        t.linkGroupId = null;
+      });
+    }
+  };
+
+  const unlinkTab = (tabId: string) => {
+    const found = findTabById(tabId);
+    if (!found?.tab.linkGroupId) return;
+    const groupId = found.tab.linkGroupId;
+    forEachTab((t) => {
+      if (t.linkGroupId === groupId) {
+        t.linkGroupId = null;
+      }
+    });
+  };
+
+  const setTabViewMode = (tabId: string, viewMode: TabViewMode) => {
+    const found = findTabById(tabId);
+    if (found) {
+      found.tab.viewMode = viewMode;
+    }
+  };
+
+  const splitActiveTabView = async () => {
+    const pane = getActivePane();
+    const tab = pane.tabs.find((t) => t.id === pane.activeTabId);
+    if (!tab) return;
+
+    const oppositeView: TabViewMode =
+      tab.viewMode === "edit" ? "preview" : "edit";
+    const linkGroupId = tab.linkGroupId ?? createId();
+    tab.linkGroupId = linkGroupId;
+
+    const paneIdx = panes.value.findIndex((p) => p.id === pane.id);
+    const newPane = createEmptyPane();
+    panes.value.splice(paneIdx + 1, 0, newPane);
+
+    activePaneId.value = newPane.id;
+    await openNote(`${tab.name}.md`, tab.path, {
+      newTab: true,
+      viewMode: oppositeView,
+      paneId: newPane.id,
+      linkGroupId,
+    });
   };
 
   const findNoteByName = (tree: NoteInfo[], name: string): NoteInfo | null => {
@@ -239,6 +442,20 @@ export function useVault() {
     return idx === -1 ? "" : path.slice(0, idx);
   };
 
+  const getNoteBreadcrumb = (notePath: string) => {
+    if (!vaultPath.value) return { folder: "", name: "" };
+    const vault = vaultPath.value.replace(/[/\\]$/, "");
+    const relative = notePath.startsWith(vault)
+      ? notePath.slice(vault.length).replace(/^[/\\]/, "")
+      : notePath;
+    const parts = relative.split(/[/\\]/).filter(Boolean);
+    const fileName = parts.pop()?.replace(/\.md$/, "") ?? "";
+    return {
+      folder: parts.join(" / "),
+      name: fileName,
+    };
+  };
+
   const renamePath = async (item: NoteInfo, newName: string) => {
     if (!vaultPath.value) return;
     const trimmed = newName.trim();
@@ -252,30 +469,14 @@ export function useVault() {
 
     await invoke("rename_path", { oldPath: item.path, newPath });
 
-    if (item.is_dir) {
-      tabs.value.forEach((t) => {
-        if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
-          t.path = newPath + t.path.slice(item.path.length);
+    forEachTab((t) => {
+      if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
+        t.path = newPath + t.path.slice(item.path.length);
+        if (t.path === newPath && !item.is_dir) {
+          t.name = finalName.replace(/\.md$/, "");
         }
-      });
-      if (
-        activeTabPath.value &&
-        (activeTabPath.value === item.path ||
-          activeTabPath.value.startsWith(`${item.path}/`))
-      ) {
-        activeTabPath.value =
-          newPath + activeTabPath.value.slice(item.path.length);
       }
-    } else {
-      const tab = tabs.value.find((t) => t.path === item.path);
-      if (tab) {
-        tab.path = newPath;
-        tab.name = finalName.replace(/\.md$/, "");
-      }
-      if (activeTabPath.value === item.path) {
-        activeTabPath.value = newPath;
-      }
-    }
+    });
 
     await refreshFileTree();
   };
@@ -291,69 +492,84 @@ export function useVault() {
 
     await invoke("rename_path", { oldPath: item.path, newPath });
 
-    if (item.is_dir) {
-      tabs.value.forEach((t) => {
-        if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
-          t.path = newPath + t.path.slice(item.path.length);
-        }
-      });
-      if (
-        activeTabPath.value &&
-        (activeTabPath.value === item.path ||
-          activeTabPath.value.startsWith(`${item.path}/`))
-      ) {
-        activeTabPath.value =
-          newPath + activeTabPath.value.slice(item.path.length);
+    forEachTab((t) => {
+      if (t.path === item.path || t.path.startsWith(`${item.path}/`)) {
+        t.path = newPath + t.path.slice(item.path.length);
       }
-    } else {
-      const tab = tabs.value.find((t) => t.path === item.path);
-      if (tab) {
-        tab.path = newPath;
-      }
-      if (activeTabPath.value === item.path) {
-        activeTabPath.value = newPath;
-      }
-    }
+    });
 
     await refreshFileTree();
   };
 
   const deleteNote = async (path: string) => {
     if (
-      activeTabPath.value &&
-      (activeTabPath.value === path ||
-        activeTabPath.value.startsWith(`${path}/`))
+      activeTab.value &&
+      (activeTab.value.path === path ||
+        activeTab.value.path.startsWith(`${path}/`))
     ) {
       clearAutosaveTimer();
     }
     await invoke("delete_note", { path });
-    tabs.value = tabs.value.filter(
-      (t) => t.path !== path && !t.path.startsWith(`${path}/`),
+
+    panes.value.forEach((pane) => {
+      pane.tabs = pane.tabs.filter(
+        (t) => t.path !== path && !t.path.startsWith(`${path}/`),
+      );
+      if (
+        pane.activeTabId &&
+        !pane.tabs.find((t) => t.id === pane.activeTabId)
+      ) {
+        pane.activeTabId = pane.tabs[0]?.id ?? null;
+      }
+    });
+
+    panes.value = panes.value.filter(
+      (pane) => pane.tabs.length > 0 || panes.value.length === 1,
     );
-    if (!tabs.value.find((t) => t.path === activeTabPath.value)) {
-      const next = tabs.value[0] ?? null;
-      if (next) {
-        await activateTab(next.path);
+
+    if (!activeTab.value) {
+      const paneWithTab = panes.value.find((p) => p.tabs.length > 0);
+      if (paneWithTab?.activeTabId) {
+        await activateTab(paneWithTab.activeTabId, paneWithTab.id);
       } else {
-        activeTabPath.value = null;
+        activePaneId.value = panes.value[0]?.id ?? null;
         backlinks.value = [];
       }
     }
+
     await refreshFileTree();
+  };
+
+  const syncTabContent = (sourceTab: NoteTab, newContent: string) => {
+    if (sourceTab.content === newContent) return;
+    forEachTab((t) => {
+      if (t.path === sourceTab.path) {
+        t.content = newContent;
+        t.isDirty = true;
+      }
+    });
+    scheduleAutosave(sourceTab);
   };
 
   const updateContent = (newContent: string) => {
     const tab = activeTab.value;
-    if (tab && tab.content !== newContent) {
-      tab.content = newContent;
-      tab.isDirty = true;
-      scheduleAutosave(tab);
-    }
+    if (tab) syncTabContent(tab, newContent);
+  };
+
+  const updateTabContent = (tabId: string, newContent: string) => {
+    const found = findTabById(tabId);
+    if (found) syncTabContent(found.tab, newContent);
   };
 
   const toggleChecklistItem = (lineIndex: number) => {
     const tab = activeTab.value;
-    if (!tab) return;
+    if (tab) toggleChecklistItemForTab(tab.id, lineIndex);
+  };
+
+  const toggleChecklistItemForTab = (tabId: string, lineIndex: number) => {
+    const found = findTabById(tabId);
+    if (!found) return;
+    const tab = found.tab;
     const lines = tab.content.split("\n");
     const line = lines[lineIndex];
     if (line === undefined) return;
@@ -361,18 +577,20 @@ export function useVault() {
     if (!match) return;
     const toggled = match[2].trim() === "" ? "x" : " ";
     lines[lineIndex] = `${match[1]}${toggled}${match[3]}`;
-    tab.content = lines.join("\n");
-    tab.isDirty = true;
-    scheduleAutosave(tab);
+    syncTabContent(tab, lines.join("\n"));
   };
 
   return {
     vaultPath,
     fileTree,
-    tabs,
+    panes,
+    activePane,
+    activePaneId,
+    activeTab,
     activeNotePath,
     activeNoteName,
     activeNoteContent,
+    hasOpenNotes,
     backlinks,
     initVault,
     selectVault,
@@ -385,9 +603,16 @@ export function useVault() {
     renamePath,
     movePath,
     getParentDir,
+    getNoteBreadcrumb,
     deleteNote,
     updateContent,
+    updateTabContent,
     toggleChecklistItem,
+    toggleChecklistItemForTab,
+    setTabViewMode,
+    splitActiveTabView,
+    unlinkTab,
+    activatePane,
     activateTab,
     closeTab,
   };

@@ -2,11 +2,9 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useVault, type NoteInfo } from "./composables/useVault";
 import { useTheme } from "./composables/useTheme";
-import NoteEditor from "./components/NoteEditor.vue";
-import NotePreview from "./components/NotePreview.vue";
 import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
-import TabBar from "./components/TabBar.vue";
+import WorkspacePane from "./components/WorkspacePane.vue";
 import DeleteConfirmationDialog from "./dialogs/DeleteConfirmationDialog.vue";
 import MoveItemDialog from "./dialogs/MoveItemDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
@@ -16,9 +14,6 @@ import {
   Plus as PlusIcon,
   FolderPlus as FolderPlusIcon,
   Search as SearchIcon,
-  Columns2 as Columns2Icon,
-  PenLine as PenLineIcon,
-  Eye as EyeIcon,
   Link2 as Link2Icon,
   RotateCcw as RotateCcwIcon,
   FileText as FileTextIcon,
@@ -28,10 +23,12 @@ import {
 const {
   vaultPath,
   fileTree,
-  tabs,
+  panes,
+  activePaneId,
+  activeTab,
   activeNotePath,
   activeNoteName,
-  activeNoteContent,
+  hasOpenNotes,
   backlinks,
   initVault,
   selectVault,
@@ -43,20 +40,23 @@ const {
   renamePath,
   movePath,
   deleteNote,
-  updateContent,
-  toggleChecklistItem,
+  getNoteBreadcrumb,
+  updateTabContent,
+  toggleChecklistItemForTab,
+  setTabViewMode,
+  splitActiveTabView,
+  unlinkTab,
+  activatePane,
   activateTab,
   closeTab,
 } = useVault();
 
 const { initTheme, accentColor } = useTheme();
 
-type ViewMode = "split" | "edit" | "preview";
 type CreateMode = "note" | "folder";
-
-const viewMode = ref<ViewMode>("split");
 const searchQuery = ref("");
 const isSettingsOpen = ref(false);
+const hoveredLinkGroupId = ref<string | null>(null);
 const createMode = ref<CreateMode | null>(null);
 const createTargetFolder = ref<NoteInfo | null>(null);
 const createInputTitle = ref("");
@@ -189,6 +189,30 @@ const cancelCreate = () => {
   createTargetFolder.value = null;
   createInputTitle.value = "";
 };
+
+const handleViewModeClick = (
+  event: MouseEvent,
+  targetMode: "edit" | "preview",
+  tabId: string,
+) => {
+  if (event.metaKey || event.ctrlKey) {
+    activateTab(tabId);
+    splitActiveTabView();
+    return;
+  }
+  setTabViewMode(tabId, targetMode);
+};
+
+const handleUnlinkTab = (tabId: string) => {
+  unlinkTab(tabId);
+  hoveredLinkGroupId.value = null;
+};
+
+const getPaneBreadcrumb = (tabPath: string) => getNoteBreadcrumb(tabPath);
+
+const visiblePanes = computed(() =>
+  panes.value.filter((pane) => pane.tabs.length > 0),
+);
 
 const submitCreate = async () => {
   const trimmed = createInputTitle.value.trim();
@@ -491,158 +515,99 @@ onUnmounted(() => {
 
     <!-- Main Workspace Area -->
     <main
-      class="flex-1 flex flex-col h-full bg-neutral-100/50 dark:bg-neutral-950 overflow-hidden transition-colors"
+      class="flex-1 flex min-h-0 h-full bg-neutral-100/50 dark:bg-neutral-950 overflow-hidden transition-colors"
     >
-      <!-- Open Tabs -->
-      <TabBar
-        v-if="tabs.length > 0"
-        :tabs="tabs"
-        :active-path="activeNotePath"
-        @select="activateTab"
-        @close="closeTab"
-      />
-
-      <!-- Top Workspace Toolbar -->
-      <header
-        class="h-14 px-6 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white/70 dark:bg-neutral-900/50 shrink-0 transition-colors"
+      <!-- Empty State -->
+      <div
+        v-if="!hasOpenNotes"
+        class="flex-1 flex flex-col items-center justify-center gap-4 text-neutral-400 dark:text-neutral-500 p-8 text-center"
       >
-        <div class="flex items-center gap-3">
-          <FileTextIcon
-            v-if="activeNoteName"
-            class="w-4 h-4"
-            :style="{ color: accentColor }"
-          />
-          <h2
-            class="font-medium text-sm text-neutral-800 dark:text-neutral-200"
-          >
-            {{ activeNoteName ? `${activeNoteName}.md` : "No note selected" }}
-          </h2>
-        </div>
-
-        <div v-if="activeNoteName" class="flex items-center gap-3">
-          <!-- View Mode Toggle -->
-          <div
-            class="flex items-center bg-neutral-200/80 dark:bg-neutral-800/80 rounded-lg p-0.5 border border-neutral-300 dark:border-neutral-700/60 text-xs transition-colors"
-          >
-            <button
-              @click="viewMode = 'edit'"
-              :class="[
-                'flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer',
-                viewMode === 'edit'
-                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200',
-              ]"
-              title="Edit Mode"
-            >
-              <PenLineIcon class="w-3.5 h-3.5" />
-              <span>Edit</span>
-            </button>
-            <button
-              @click="viewMode = 'split'"
-              :class="[
-                'flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer',
-                viewMode === 'split'
-                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200',
-              ]"
-              title="Split Mode (Side-by-side)"
-            >
-              <Columns2Icon class="w-3.5 h-3.5" />
-              <span>Split</span>
-            </button>
-            <button
-              @click="viewMode = 'preview'"
-              :class="[
-                'flex items-center gap-1 px-2.5 py-1 rounded-md transition-colors cursor-pointer',
-                viewMode === 'preview'
-                  ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white font-medium shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200',
-              ]"
-              title="Preview Mode"
-            >
-              <EyeIcon class="w-3.5 h-3.5" />
-              <span>Preview</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <!-- Main Body Container -->
-      <div class="flex-1 flex overflow-hidden">
-        <!-- Empty State -->
         <div
-          v-if="!activeNoteName"
-          class="flex-1 flex flex-col items-center justify-center gap-4 text-neutral-400 dark:text-neutral-500 p-8 text-center"
+          class="w-16 h-16 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 flex items-center justify-center text-neutral-400 dark:text-neutral-600 transition-colors"
         >
-          <div
-            class="w-16 h-16 rounded-2xl bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 flex items-center justify-center text-neutral-400 dark:text-neutral-600 transition-colors"
-          >
-            <FileTextIcon
-              class="w-8 h-8 text-neutral-400 dark:text-neutral-600"
-            />
-          </div>
-          <div>
-            <h3
-              class="text-base font-medium text-neutral-800 dark:text-neutral-300 mb-1"
-            >
-              No note open
-            </h3>
-            <p class="text-xs text-neutral-500 dark:text-neutral-500 max-w-sm">
-              Select a markdown file from the left sidebar, or open a vault to
-              start writing and interlinking your ideas.
-            </p>
-          </div>
-          <div v-if="vaultPath" class="flex gap-2">
-            <button
-              @click="startCreateFolder()"
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-medium transition-colors cursor-pointer"
-            >
-              <FolderPlusIcon class="w-3.5 h-3.5" />
-              <span>New Folder</span>
-            </button>
-            <button
-              @click="startCreateNote()"
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-opacity hover:opacity-90 cursor-pointer"
-              :style="{ backgroundColor: accentColor }"
-            >
-              <PlusIcon class="w-3.5 h-3.5" />
-              <span>New Note</span>
-            </button>
-          </div>
+          <FileTextIcon
+            class="w-8 h-8 text-neutral-400 dark:text-neutral-600"
+          />
         </div>
-
-        <!-- Note Active: Split / Edit / Preview -->
-        <template v-else>
-          <!-- Editor Pane -->
-          <div
-            v-if="viewMode === 'edit' || viewMode === 'split'"
-            :class="[
-              'h-full overflow-hidden flex flex-col',
-              viewMode === 'split' ? 'w-1/2' : 'w-full',
-            ]"
+        <div>
+          <h3
+            class="text-base font-medium text-neutral-800 dark:text-neutral-300 mb-1"
           >
-            <NoteEditor
-              :model-value="activeNoteContent"
-              @update:model-value="updateContent"
-            />
-          </div>
-
-          <!-- Preview Pane -->
-          <div
-            v-if="viewMode === 'preview' || viewMode === 'split'"
-            :class="[
-              'h-full overflow-hidden flex flex-col',
-              viewMode === 'split' ? 'w-1/2' : 'w-full',
-            ]"
+            No note open
+          </h3>
+          <p class="text-xs text-neutral-500 dark:text-neutral-500 max-w-sm">
+            Select a markdown file from the left sidebar, or open a vault to
+            start writing and interlinking your ideas.
+          </p>
+        </div>
+        <div v-if="vaultPath" class="flex gap-2">
+          <button
+            @click="startCreateFolder()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-medium transition-colors cursor-pointer"
           >
-            <NotePreview
-              :content="activeNoteContent"
-              @open-note="handleWikiLinkClick"
-              @toggle-checkbox="toggleChecklistItem"
-            />
-          </div>
-        </template>
+            <FolderPlusIcon class="w-3.5 h-3.5" />
+            <span>New Folder</span>
+          </button>
+          <button
+            @click="startCreateNote()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-medium transition-opacity hover:opacity-90 cursor-pointer"
+            :style="{ backgroundColor: accentColor }"
+          >
+            <PlusIcon class="w-3.5 h-3.5" />
+            <span>New Note</span>
+          </button>
+        </div>
       </div>
+
+      <!-- Obsidian-style panes -->
+      <template v-else>
+        <WorkspacePane
+          v-for="(pane, index) in visiblePanes"
+          :key="pane.id"
+          :pane="pane"
+          :is-active="pane.id === activePaneId"
+          :accent-color="accentColor"
+          :highlighted-link-group-id="hoveredLinkGroupId"
+          :breadcrumb-folder="
+            pane.activeTabId
+              ? getPaneBreadcrumb(
+                  pane.tabs.find((t) => t.id === pane.activeTabId)?.path ?? '',
+                ).folder
+              : ''
+          "
+          :breadcrumb-name="
+            pane.activeTabId
+              ? getPaneBreadcrumb(
+                  pane.tabs.find((t) => t.id === pane.activeTabId)?.path ?? '',
+                ).name
+              : ''
+          "
+          :class="[
+            'flex-1 min-h-0 min-w-0',
+            index < visiblePanes.length - 1
+              ? 'border-r border-neutral-200 dark:border-neutral-800'
+              : '',
+          ]"
+          @activate="activatePane(pane.id)"
+          @select-tab="activateTab($event, pane.id)"
+          @close-tab="closeTab(pane.id, $event)"
+          @unlink-tab="handleUnlinkTab"
+          @link-hover="hoveredLinkGroupId = $event"
+          @view-mode-click="
+            (event, mode) =>
+              handleViewModeClick(
+                event,
+                mode,
+                pane.activeTabId ?? activeTab?.id ?? '',
+              )
+          "
+          @update-content="(tabId, content) => updateTabContent(tabId, content)"
+          @open-note="handleWikiLinkClick"
+          @toggle-checkbox="
+            (tabId, lineIndex) => toggleChecklistItemForTab(tabId, lineIndex)
+          "
+        />
+      </template>
     </main>
 
     <!-- Settings Dialog Component -->

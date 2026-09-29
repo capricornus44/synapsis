@@ -573,7 +573,7 @@ export function useVault() {
     const lines = tab.content.split("\n");
     const line = lines[lineIndex];
     if (line === undefined) return;
-    const match = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s.*)$/);
+    const match = line.match(/^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\].*)$/);
     if (!match) return;
     const toggled = match[2].trim() === "" ? "x" : " ";
     lines[lineIndex] = `${match[1]}${toggled}${match[3]}`;

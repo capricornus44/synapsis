@@ -5,6 +5,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { defaultKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { synapsisEditorTheme } from "../editor/theme";
+import { taskCheckboxes } from "../editor/taskCheckboxes";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{
@@ -22,6 +23,7 @@ onMounted(() => {
     extensions: [
       markdown(),
       synapsisEditorTheme,
+      taskCheckboxes,
       keymap.of(defaultKeymap),
       EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
@@ -78,5 +80,16 @@ watch(
 }
 .cm-editor.cm-focused {
   outline: none;
+}
+
+/* Dark-mode task checkboxes (html.dark, not CM &dark facet) */
+html.dark .cm-task-checkbox {
+  border-color: #525252;
+  background-color: #262626;
+}
+
+html.dark .cm-task-checkbox:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 </style>

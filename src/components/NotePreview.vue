@@ -21,12 +21,24 @@ const processWikiLinks = (text: string) => {
 // Source line numbers of GFM task list items, in document order, so rendered
 // checkboxes can be mapped back to the line marked toggles in the raw markdown.
 const getChecklistLines = (text: string): number[] => {
-  const taskLineRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s/;
+  const taskLineRegex = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/;
   return text.split("\n").reduce<number[]>((lines, line, index) => {
     if (taskLineRegex.test(line)) lines.push(index);
     return lines;
   }, []);
 };
+
+// marked/GFM requires content after `[ ]` / `[x]` to emit a task checkbox.
+// Empty `- [ ]` lines otherwise render as a plain bullet + "[]".
+const ensureTaskListContent = (text: string) =>
+  text
+    .split("\n")
+    .map((line) =>
+      /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s*$/.test(line)
+        ? `${line.replace(/\s*$/, "")} \u200b`
+        : line,
+    )
+    .join("\n");
 
 // marked renders task checkboxes as `<input disabled type=\"checkbox\">`; swap in
 // a data-line index (so clicks can be mapped to source) and drop `disabled`.
@@ -44,7 +56,7 @@ const makeChecklistInteractive = (html: string, lineNumbers: number[]) => {
 };
 
 const parsedHtml = computed(() => {
-  const htmlWithWiki = processWikiLinks(props.content);
+  const htmlWithWiki = processWikiLinks(ensureTaskListContent(props.content));
   const rawHtml = String(marked.parse(htmlWithWiki));
   const interactiveHtml = makeChecklistInteractive(
     rawHtml,

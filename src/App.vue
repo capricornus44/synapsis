@@ -2,6 +2,10 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useVault, type NoteInfo } from "./composables/useVault";
 import { useTheme } from "./composables/useTheme";
+import {
+  TREE_ROOT_DROP,
+  useFileTreeDrag,
+} from "./composables/useFileTreeDrag";
 import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import WorkspacePane from "./components/WorkspacePane.vue";
@@ -52,6 +56,12 @@ const {
 } = useVault();
 
 const { initTheme, accentColor } = useTheme();
+const {
+  dragSource,
+  dropTargetPath,
+  dragPosition,
+  isDragging,
+} = useFileTreeDrag();
 
 type CreateMode = "note" | "folder";
 const searchQuery = ref("");
@@ -145,6 +155,20 @@ const openInNewTab = (item: NoteInfo) => {
 
 const handleContextMenu = (item: NoteInfo, event: MouseEvent) => {
   contextMenuTarget.value = { item, x: event.clientX, y: event.clientY };
+};
+
+const isRootDropTarget = computed(
+  () => isDragging.value && dropTargetPath.value === TREE_ROOT_DROP,
+);
+
+const handleTreeDragDrop = async (event: Event) => {
+  const { source, targetPath } = (
+    event as CustomEvent<{ source: NoteInfo; targetPath: string }>
+  ).detail;
+  if (!vaultPath.value) return;
+  const destination =
+    targetPath === TREE_ROOT_DROP ? vaultPath.value : targetPath;
+  await movePath(source, destination);
 };
 
 const closeContextMenu = () => {
@@ -276,12 +300,14 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
+  window.addEventListener("tree-drag-drop", handleTreeDragDrop);
   initTheme();
   initVault();
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
+  window.removeEventListener("tree-drag-drop", handleTreeDragDrop);
 });
 </script>
 
@@ -442,7 +468,15 @@ onUnmounted(() => {
       </div>
 
       <!-- File Explorer Tree -->
-      <div class="flex-1 overflow-y-auto p-2">
+      <div
+        data-tree-drop-root="true"
+        class="flex-1 overflow-y-auto p-2 transition-colors"
+        :class="
+          isRootDropTarget
+            ? 'bg-accent/10 ring-1 ring-inset ring-accent/40 rounded-md'
+            : ''
+        "
+      >
         <div
           v-if="vaultPath && displayedTree.length === 0"
           class="p-4 text-center text-xs text-neutral-400 dark:text-neutral-500"
@@ -473,12 +507,32 @@ onUnmounted(() => {
           :item="item"
           :active-path="activeNotePath"
           :renaming-path="renamingPath"
+          :parent-path="vaultPath"
           @open="handleSelectNote"
           @rename="submitRename"
           @rename-cancel="cancelRename"
           @context-menu="handleContextMenu"
         />
       </div>
+
+      <!-- Drag ghost -->
+      <Teleport to="body">
+        <div
+          v-if="isDragging && dragSource && dragPosition"
+          id="tree-drag-ghost"
+          class="fixed z-[100] pointer-events-none px-2 py-1 rounded-md text-xs font-medium shadow-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 max-w-[200px] truncate"
+          :style="{
+            left: `${dragPosition.x + 12}px`,
+            top: `${dragPosition.y + 12}px`,
+          }"
+        >
+          {{
+            dragSource.is_dir
+              ? dragSource.name
+              : dragSource.name.replace(/\.md$/, "")
+          }}
+        </div>
+      </Teleport>
 
       <!-- Backlinks Panel -->
       <div

@@ -8,7 +8,7 @@ import {
 } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
 
-const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
+const TASK_LINE_RE = /^(\s*)((?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
 
 class CheckboxWidget extends WidgetType {
   constructor(readonly checked: boolean) {
@@ -44,8 +44,8 @@ function buildCheckboxDecorations(view: EditorView): DecorationSet {
       const match = line.text.match(TASK_LINE_RE);
       if (match) {
         const start = line.from + match[1].length;
-        const end = start + 3; // "[ ]" or "[x]"
-        const checked = match[2].trim() !== "";
+        const end = start + match[2].length + 3; // hide marker + replace "[ ]" / "[x]"
+        const checked = match[3].trim() !== "";
         builder.add(
           start,
           end,
@@ -66,8 +66,8 @@ function toggleCheckboxAt(view: EditorView, pos: number) {
   const match = line.text.match(TASK_LINE_RE);
   if (!match) return false;
 
-  const checkCharFrom = line.from + match[1].length + 1; // char inside brackets
-  const current = match[2];
+  const checkCharFrom = line.from + match[1].length + match[2].length + 1; // char inside brackets
+  const current = match[3];
   const next = current.trim() === "" ? "x" : " ";
 
   view.dispatch({

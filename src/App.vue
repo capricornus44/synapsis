@@ -3,9 +3,11 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useVault, type NoteInfo } from "./composables/useVault";
 import { useTheme } from "./composables/useTheme";
 import { TREE_ROOT_DROP, useFileTreeDrag } from "./composables/useFileTreeDrag";
+import type { GraphData } from "./types/graph";
 import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import WorkspacePane from "./components/WorkspacePane.vue";
+import GraphView from "./components/GraphView.vue";
 import DeleteConfirmationDialog from "./dialogs/DeleteConfirmationDialog.vue";
 import MoveItemDialog from "./dialogs/MoveItemDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
@@ -20,6 +22,7 @@ import {
   RotateCcw as RotateCcwIcon,
   FileText as FileTextIcon,
   Sparkles as SparklesIcon,
+  Share2 as GraphIcon,
 } from "@lucide/vue";
 
 const {
@@ -35,6 +38,7 @@ const {
   initVault,
   selectVault,
   refreshFileTree,
+  fetchGraphData,
   openNote,
   openNoteByName,
   createNote,
@@ -60,6 +64,8 @@ const { dragSource, dropTarget, dropTargetPath, dragPosition, isDragging } =
 type CreateMode = "note" | "folder";
 const searchQuery = ref("");
 const isSettingsOpen = ref(false);
+const isGraphOpen = ref(false);
+const graphData = ref<GraphData>({ nodes: [], edges: [] });
 const hoveredLinkGroupId = ref<string | null>(null);
 const createMode = ref<CreateMode | null>(null);
 const createTargetFolder = ref<NoteInfo | null>(null);
@@ -120,6 +126,9 @@ const confirmDelete = async () => {
     const path = deleteTarget.value.path;
     deleteTarget.value = null;
     await deleteNote(path);
+    if (isGraphOpen.value) {
+      await refreshGraph();
+    }
   }
 };
 
@@ -136,6 +145,9 @@ const confirmMove = async (targetDirPath: string) => {
     const item = moveTarget.value;
     moveTarget.value = null;
     await movePath(item, targetDirPath);
+    if (isGraphOpen.value) {
+      await refreshGraph();
+    }
   }
 };
 
@@ -163,6 +175,9 @@ const handleTreeDragDrop = async (event: Event) => {
   const destination =
     targetPath === TREE_ROOT_DROP ? vaultPath.value : targetPath;
   await movePath(source, destination);
+  if (isGraphOpen.value) {
+    await refreshGraph();
+  }
 };
 
 const handleTabZoneDrop = async (event: Event) => {
@@ -211,6 +226,9 @@ const cancelRename = () => {
 const submitRename = async (item: NoteInfo, newName: string) => {
   renamingPath.value = null;
   await renamePath(item, newName);
+  if (isGraphOpen.value) {
+    await refreshGraph();
+  }
 };
 
 const handleOpenBacklink = (targetName: string) => {
@@ -273,12 +291,44 @@ const submitCreate = async () => {
     await createNote(trimmed, parentPath);
   }
   cancelCreate();
+  if (isGraphOpen.value) {
+    await refreshGraph();
+  }
+};
+
+const openGraphView = async () => {
+  if (!vaultPath.value) return;
+  graphData.value = await fetchGraphData();
+  isGraphOpen.value = true;
+};
+
+const refreshGraph = async () => {
+  if (vaultPath.value) {
+    graphData.value = await fetchGraphData();
+  }
+};
+
+const handleOpenNoteFromGraph = async (
+  noteName: string,
+  path: string | null,
+  newTab: boolean,
+) => {
+  isGraphOpen.value = false;
+  if (path) {
+    await openNote(`${noteName}.md`, path, { newTab });
+  } else {
+    await openNoteByName(noteName);
+  }
 };
 
 // Keyboard shortcut handler (Cmd/Ctrl + N to new note,
-// Cmd/Ctrl + F to new folder, Cmd/Ctrl + R to refresh vault, Cmd/Ctrl + , to settings, Escape to close modals)
+// Cmd/Ctrl + F to new folder, Cmd/Ctrl + R to refresh vault, Cmd/Ctrl + G to Graph View, Cmd/Ctrl + , to settings, Escape to close modals)
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === "Escape") {
+    if (isGraphOpen.value) {
+      isGraphOpen.value = false;
+      return;
+    }
     if (isSettingsOpen.value) {
       isSettingsOpen.value = false;
       return;
@@ -305,6 +355,13 @@ const handleKeydown = (e: KeyboardEvent) => {
   if (isModifier && e.key === ",") {
     e.preventDefault();
     isSettingsOpen.value = !isSettingsOpen.value;
+  } else if (isModifier && e.key.toLowerCase() === "g") {
+    e.preventDefault();
+    if (isGraphOpen.value) {
+      isGraphOpen.value = false;
+    } else if (vaultPath.value) {
+      openGraphView();
+    }
   } else if (isModifier && e.key.toLowerCase() === "n") {
     e.preventDefault();
     if (vaultPath.value) {
@@ -319,6 +376,9 @@ const handleKeydown = (e: KeyboardEvent) => {
     e.preventDefault();
     if (vaultPath.value) {
       refreshFileTree();
+      if (isGraphOpen.value) {
+        refreshGraph();
+      }
     }
   }
 };
@@ -366,6 +426,14 @@ onUnmounted(() => {
           </h1>
         </div>
         <div class="flex items-center gap-1">
+          <button
+            v-if="vaultPath"
+            @click="openGraphView"
+            title="Graph View (Ctrl/Cmd+G)"
+            class="p-1.5 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 transition-colors cursor-pointer"
+          >
+            <GraphIcon class="w-4 h-4" />
+          </button>
           <button
             v-if="vaultPath"
             @click="selectVault"
@@ -645,6 +713,13 @@ onUnmounted(() => {
         </div>
         <div v-if="vaultPath" class="flex gap-2">
           <button
+            @click="openGraphView"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-medium transition-colors cursor-pointer"
+          >
+            <GraphIcon class="w-3.5 h-3.5" />
+            <span>Graph View</span>
+          </button>
+          <button
             @click="startCreateFolder()"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-medium transition-colors cursor-pointer"
           >
@@ -712,6 +787,17 @@ onUnmounted(() => {
         />
       </template>
     </main>
+
+    <!-- Graph View Modal Component -->
+    <GraphView
+      :is-open="isGraphOpen"
+      :graph-data="graphData"
+      :active-note-name="activeNoteName"
+      :accent-color="accentColor"
+      @close="isGraphOpen = false"
+      @open-note="handleOpenNoteFromGraph"
+      @refresh="refreshGraph"
+    />
 
     <!-- Settings Dialog Component -->
     <SettingsDialog

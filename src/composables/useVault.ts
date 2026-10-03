@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import type { GraphData } from "../types/graph";
 
 export interface NoteInfo {
   name: string;
@@ -172,6 +173,20 @@ export function useVault() {
     } catch (err) {
       console.error("Failed to fetch backlinks:", err);
       backlinks.value = [];
+    }
+  };
+
+  const fetchGraphData = async (): Promise<GraphData> => {
+    if (!vaultPath.value) {
+      return { nodes: [], edges: [] };
+    }
+    try {
+      return await invoke<GraphData>("get_vault_graph", {
+        vaultPath: vaultPath.value,
+      });
+    } catch (err) {
+      console.error("Failed to fetch graph data:", err);
+      return { nodes: [], edges: [] };
     }
   };
 
@@ -618,6 +633,7 @@ export function useVault() {
     selectVault,
     openVaultPath,
     refreshFileTree,
+    fetchGraphData,
     openNote,
     openNoteByName,
     createNote,

@@ -37,7 +37,8 @@ pub fn run() {
             commands::create_folder,
             commands::rename_path,
             commands::delete_note,
-            commands::get_backlinks
+            commands::get_backlinks,
+            commands::get_vault_graph
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

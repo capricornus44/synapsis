@@ -64,6 +64,15 @@ pub async fn get_backlinks(vault_path: String, note_name: String) -> Result<Vec<
     Ok(names)
 }
 
+#[tauri::command]
+pub async fn get_vault_graph(vault_path: String) -> Result<indexer::GraphData, String> {
+    let p = Path::new(&vault_path);
+    if !p.exists() {
+        return Err("Vault path does not exist".into());
+    }
+    Ok(indexer::build_graph(p))
+}
+
 fn read_dir_recursive(path: &Path) -> std::io::Result<Vec<NoteInfo>> {
     let mut result = Vec::new();
     for entry in fs::read_dir(path)? {

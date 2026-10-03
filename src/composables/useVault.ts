@@ -64,7 +64,9 @@ export function useVault() {
     if (!activePaneId.value) {
       activePaneId.value = panes.value[0].id;
     }
-    return panes.value.find((p) => p.id === activePaneId.value) ?? panes.value[0];
+    return (
+      panes.value.find((p) => p.id === activePaneId.value) ?? panes.value[0]
+    );
   };
 
   const activePane = computed(
@@ -210,16 +212,27 @@ export function useVault() {
       viewMode?: TabViewMode;
       paneId?: string;
       linkGroupId?: string | null;
+      insertIndex?: number;
+      replaceActive?: boolean;
     },
   ) => {
     const pane = options?.paneId
       ? (panes.value.find((p) => p.id === options.paneId) ?? getActivePane())
       : getActivePane();
 
-    if (!options?.newTab) {
+    if (!options?.newTab && !options?.replaceActive) {
       const existing = pane.tabs.find((t) => t.path === path);
       if (existing) {
         await activateTab(existing.id, pane.id);
+        return;
+      }
+    }
+
+    if (options?.replaceActive && pane.activeTabId) {
+      const activeTab = pane.tabs.find((t) => t.id === pane.activeTabId);
+      if (activeTab && activeTab.path === path) {
+        activePaneId.value = pane.id;
+        await fetchBacklinksFor(activeTab.name);
         return;
       }
     }
@@ -241,7 +254,15 @@ export function useVault() {
       };
 
       if (options?.newTab || pane.tabs.length === 0) {
-        pane.tabs.push(newTab);
+        if (
+          typeof options?.insertIndex === "number" &&
+          options.insertIndex >= 0 &&
+          options.insertIndex <= pane.tabs.length
+        ) {
+          pane.tabs.splice(options.insertIndex, 0, newTab);
+        } else {
+          pane.tabs.push(newTab);
+        }
       } else {
         const activeIdx = pane.tabs.findIndex((t) => t.id === pane.activeTabId);
         if (activeIdx !== -1) {
@@ -251,6 +272,7 @@ export function useVault() {
             await persistTab(current);
           }
           const previousLinkGroupId = current.linkGroupId;
+          newTab.viewMode = options?.viewMode ?? current.viewMode;
           pane.tabs.splice(activeIdx, 1, newTab);
           if (previousLinkGroupId) {
             clearOrphanedLinkGroups(previousLinkGroupId);

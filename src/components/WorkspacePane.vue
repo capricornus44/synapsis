@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { WorkspacePane } from "../composables/useVault";
+import { useFileTreeDrag } from "../composables/useFileTreeDrag";
 import TabBar from "./TabBar.vue";
 import NoteEditor from "./NoteEditor.vue";
 import NotePreview from "./NotePreview.vue";
@@ -27,11 +28,23 @@ const emit = defineEmits<{
   (e: "close-tab", tabId: string): void;
   (e: "unlink-tab", tabId: string): void;
   (e: "link-hover", linkGroupId: string | null): void;
-  (e: "view-mode-click", event: MouseEvent, targetMode: "edit" | "preview"): void;
+  (
+    e: "view-mode-click",
+    event: MouseEvent,
+    targetMode: "edit" | "preview",
+  ): void;
   (e: "update-content", tabId: string, content: string): void;
   (e: "open-note", targetName: string): void;
   (e: "toggle-checkbox", tabId: string, lineIndex: number): void;
 }>();
+
+const { dropTarget, isDragging } = useFileTreeDrag();
+
+const isHeaderDropTarget = computed(
+  () =>
+    dropTarget.value?.type === "file-name-zone" &&
+    dropTarget.value.paneId === props.pane.id,
+);
 
 const activeTab = computed(
   () => props.pane.tabs.find((t) => t.id === props.pane.activeTabId) ?? null,
@@ -56,6 +69,7 @@ const isContentLinkedHighlight = computed(
   >
     <TabBar
       v-if="pane.tabs.length > 0"
+      :pane-id="pane.id"
       :tabs="pane.tabs"
       :active-tab-id="pane.activeTabId"
       :accent-color="accentColor"
@@ -67,7 +81,22 @@ const isContentLinkedHighlight = computed(
 
     <header
       v-if="activeTab"
-      class="h-9 px-2 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-1 shrink-0 bg-white/80 dark:bg-neutral-950/80 transition-colors"
+      data-drop-zone="file-name-zone"
+      :data-pane-id="pane.id"
+      class="h-9 px-2 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-1 shrink-0 transition-colors relative select-none"
+      :class="[
+        isHeaderDropTarget
+          ? 'bg-neutral-100 dark:bg-neutral-800 ring-1 ring-inset'
+          : 'bg-white/80 dark:bg-neutral-950/80',
+      ]"
+      :style="
+        isHeaderDropTarget
+          ? {
+              backgroundColor: accentColor + '18',
+              borderColor: accentColor,
+            }
+          : undefined
+      "
     >
       <div class="flex items-center shrink-0">
         <button
@@ -87,14 +116,15 @@ const isContentLinkedHighlight = computed(
       </div>
 
       <div
-        class="flex-1 min-w-0 flex items-center justify-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 truncate px-2"
+        class="flex-1 min-w-0 flex items-center justify-center gap-1 text-xs text-neutral-500 dark:text-neutral-400 truncate px-2 transition-all"
+        :class="isHeaderDropTarget ? 'scale-[1.02]' : ''"
       >
         <template v-if="breadcrumbFolder">
           <span class="truncate">{{ breadcrumbFolder }}</span>
           <span class="text-neutral-400 dark:text-neutral-600 shrink-0">/</span>
         </template>
         <span
-          class="truncate font-medium"
+          class="truncate font-medium transition-colors"
           :style="{ color: accentColor }"
         >
           {{ breadcrumbName }}
@@ -130,6 +160,7 @@ const isContentLinkedHighlight = computed(
 
     <div
       class="relative flex-1 min-h-0 overflow-hidden transition-[box-shadow] duration-150"
+      :class="isDragging ? 'pointer-events-none select-none' : ''"
       :style="
         isContentLinkedHighlight
           ? {

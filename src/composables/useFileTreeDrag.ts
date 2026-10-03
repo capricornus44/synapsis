@@ -3,8 +3,17 @@ import type { NoteInfo } from "./useVault";
 
 export const TREE_ROOT_DROP = "__vault_root__";
 
+export type DropTarget =
+  | { type: "tree"; path: string }
+  | { type: "tab-zone"; paneId: string; insertIndex: number }
+  | { type: "file-name-zone"; paneId: string }
+  | null;
+
 const dragSource = ref<NoteInfo | null>(null);
-const dropTargetPath = ref<string | null>(null);
+const dropTarget = ref<DropTarget>(null);
+const dropTargetPath = computed(() =>
+  dropTarget.value?.type === "tree" ? dropTarget.value.path : null,
+);
 const dragPosition = ref<{ x: number; y: number } | null>(null);
 const isDragging = computed(() => dragSource.value !== null);
 
@@ -21,13 +30,36 @@ type PointerSession = {
 let session: PointerSession | null = null;
 let suppressNextClick = false;
 
+const preventDefaultHandler = (e: Event) => {
+  e.preventDefault();
+};
+
+const clearTextSelection = () => {
+  try {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      sel.removeAllRanges();
+    }
+  } catch {}
+};
+
 const resetDrag = () => {
   dragSource.value = null;
-  dropTargetPath.value = null;
+  dropTarget.value = null;
   dragPosition.value = null;
   session = null;
+  document.documentElement.classList.remove("is-tree-dragging");
+  document.body.classList.remove("is-tree-dragging");
   document.body.style.removeProperty("cursor");
   document.body.style.removeProperty("user-select");
+  document.body.style.removeProperty("-webkit-user-select");
+  window.removeEventListener("selectstart", preventDefaultHandler, {
+    capture: true,
+  });
+  window.removeEventListener("dragstart", preventDefaultHandler, {
+    capture: true,
+  });
+  clearTextSelection();
 };
 
 const isInvalidFolderTarget = (source: NoteInfo, targetPath: string) => {
@@ -43,22 +75,94 @@ const isInvalidFolderTarget = (source: NoteInfo, targetPath: string) => {
   return false;
 };
 
-const resolveDropPath = (clientX: number, clientY: number): string | null => {
+const resolveDropTarget = (
+  clientX: number,
+  clientY: number,
+  source: NoteInfo,
+): DropTarget => {
   const el = document.elementFromPoint(clientX, clientY);
   if (!el) return null;
 
+  // 1. If it's a note (not a directory), check workspace pane drop zones
+  if (!source.is_dir) {
+    // Check file name zone (header / breadcrumbs)
+    const headerZone = el.closest<HTMLElement>(
+      '[data-drop-zone="file-name-zone"]',
+    );
+    if (headerZone?.dataset.paneId) {
+      return {
+        type: "file-name-zone",
+        paneId: headerZone.dataset.paneId,
+      };
+    }
+
+    // Check tab zone (tab bar)
+    const tabZone = el.closest<HTMLElement>('[data-drop-zone="tab-zone"]');
+    if (tabZone?.dataset.paneId) {
+      const paneId = tabZone.dataset.paneId;
+      const tabElements = Array.from(
+        tabZone.querySelectorAll<HTMLElement>("[data-tab-index]"),
+      );
+
+      if (tabElements.length === 0) {
+        return { type: "tab-zone", paneId, insertIndex: 0 };
+      }
+
+      // Check if dropped directly on a tab element
+      const currentTab = el.closest<HTMLElement>("[data-tab-index]");
+      if (currentTab?.dataset.tabIndex !== undefined) {
+        const idx = parseInt(currentTab.dataset.tabIndex, 10);
+        const rect = currentTab.getBoundingClientRect();
+        const insertIndex =
+          clientX < rect.left + rect.width / 2 ? idx : idx + 1;
+        return { type: "tab-zone", paneId, insertIndex };
+      }
+
+      // If hovering empty space to the right or left of tabs
+      const firstRect = tabElements[0].getBoundingClientRect();
+      const lastRect =
+        tabElements[tabElements.length - 1].getBoundingClientRect();
+
+      if (clientX < firstRect.left) {
+        return { type: "tab-zone", paneId, insertIndex: 0 };
+      }
+      if (clientX >= lastRect.right) {
+        return { type: "tab-zone", paneId, insertIndex: tabElements.length };
+      }
+
+      for (let i = 0; i < tabElements.length; i++) {
+        const rect = tabElements[i].getBoundingClientRect();
+        if (clientX >= rect.left && clientX <= rect.right) {
+          const insertIndex = clientX < rect.left + rect.width / 2 ? i : i + 1;
+          return { type: "tab-zone", paneId, insertIndex };
+        }
+      }
+
+      return { type: "tab-zone", paneId, insertIndex: tabElements.length };
+    }
+  }
+
+  // 2. Tree drop targets (folder / parent folder / root)
   const folder = el.closest<HTMLElement>("[data-tree-drop-folder]");
   if (folder?.dataset.treeDropFolder) {
-    return folder.dataset.treeDropFolder;
+    const targetPath = folder.dataset.treeDropFolder;
+    if (!isInvalidFolderTarget(source, targetPath)) {
+      return { type: "tree", path: targetPath };
+    }
+    return null;
   }
 
   const file = el.closest<HTMLElement>("[data-tree-drop-parent]");
   if (file?.dataset.treeDropParent) {
-    return file.dataset.treeDropParent;
+    const targetPath = file.dataset.treeDropParent;
+    if (!isInvalidFolderTarget(source, targetPath)) {
+      return { type: "tree", path: targetPath };
+    }
+    return null;
   }
 
   if (el.closest("[data-tree-drop-root]")) {
-    return TREE_ROOT_DROP;
+    return { type: "tree", path: TREE_ROOT_DROP };
   }
 
   return null;
@@ -75,18 +179,21 @@ const onPointerMove = (e: PointerEvent) => {
     session.active = true;
     suppressNextClick = true;
     dragSource.value = session.item;
+    document.documentElement.classList.add("is-tree-dragging");
+    document.body.classList.add("is-tree-dragging");
     document.body.style.cursor = "grabbing";
     document.body.style.userSelect = "none";
+    document.body.style.webkitUserSelect = "none";
+    clearTextSelection();
+  }
+
+  if (session.active) {
+    e.preventDefault();
+    clearTextSelection();
   }
 
   dragPosition.value = { x: e.clientX, y: e.clientY };
-
-  const target = resolveDropPath(e.clientX, e.clientY);
-  if (target && isInvalidFolderTarget(session.item, target)) {
-    dropTargetPath.value = null;
-    return;
-  }
-  dropTargetPath.value = target;
+  dropTarget.value = resolveDropTarget(e.clientX, e.clientY, session.item);
 };
 
 const onPointerUp = (e: PointerEvent) => {
@@ -94,13 +201,10 @@ const onPointerUp = (e: PointerEvent) => {
 
   const source = session.item;
   const wasActive = session.active;
-  let target: string | null = null;
+  let target: DropTarget = null;
 
   if (wasActive) {
-    target = resolveDropPath(e.clientX, e.clientY);
-    if (target && isInvalidFolderTarget(source, target)) {
-      target = null;
-    }
+    target = resolveDropTarget(e.clientX, e.clientY, source);
   }
 
   window.removeEventListener("pointermove", onPointerMove);
@@ -110,11 +214,32 @@ const onPointerUp = (e: PointerEvent) => {
   resetDrag();
 
   if (wasActive && target) {
-    window.dispatchEvent(
-      new CustomEvent("tree-drag-drop", {
-        detail: { source, targetPath: target },
-      }),
-    );
+    if (target.type === "tree") {
+      window.dispatchEvent(
+        new CustomEvent("tree-drag-drop", {
+          detail: { source, targetPath: target.path },
+        }),
+      );
+    } else if (target.type === "tab-zone") {
+      window.dispatchEvent(
+        new CustomEvent("tab-zone-drop", {
+          detail: {
+            source,
+            paneId: target.paneId,
+            insertIndex: target.insertIndex,
+          },
+        }),
+      );
+    } else if (target.type === "file-name-zone") {
+      window.dispatchEvent(
+        new CustomEvent("file-name-zone-drop", {
+          detail: {
+            source,
+            paneId: target.paneId,
+          },
+        }),
+      );
+    }
   }
 };
 
@@ -134,6 +259,12 @@ export function beginTreeDrag(
     pointerId: e.pointerId,
   };
 
+  window.addEventListener("selectstart", preventDefaultHandler, {
+    capture: true,
+  });
+  window.addEventListener("dragstart", preventDefaultHandler, {
+    capture: true,
+  });
   window.addEventListener("pointermove", onPointerMove);
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", onPointerUp);
@@ -148,6 +279,7 @@ export function consumeTreeDragClickSuppression() {
 export function useFileTreeDrag() {
   return {
     dragSource,
+    dropTarget,
     dropTargetPath,
     dragPosition,
     isDragging,

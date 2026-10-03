@@ -2,10 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useVault, type NoteInfo } from "./composables/useVault";
 import { useTheme } from "./composables/useTheme";
-import {
-  TREE_ROOT_DROP,
-  useFileTreeDrag,
-} from "./composables/useFileTreeDrag";
+import { TREE_ROOT_DROP, useFileTreeDrag } from "./composables/useFileTreeDrag";
 import FileTreeItem from "./components/FileTreeItem.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import WorkspacePane from "./components/WorkspacePane.vue";
@@ -14,6 +11,7 @@ import MoveItemDialog from "./dialogs/MoveItemDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
 import {
   FolderOpen as FolderOpenIcon,
+  Folder as FolderIcon,
   Settings as SettingsIcon,
   Plus as PlusIcon,
   FolderPlus as FolderPlusIcon,
@@ -56,12 +54,8 @@ const {
 } = useVault();
 
 const { initTheme, accentColor } = useTheme();
-const {
-  dragSource,
-  dropTargetPath,
-  dragPosition,
-  isDragging,
-} = useFileTreeDrag();
+const { dragSource, dropTarget, dropTargetPath, dragPosition, isDragging } =
+  useFileTreeDrag();
 
 type CreateMode = "note" | "folder";
 const searchQuery = ref("");
@@ -169,6 +163,37 @@ const handleTreeDragDrop = async (event: Event) => {
   const destination =
     targetPath === TREE_ROOT_DROP ? vaultPath.value : targetPath;
   await movePath(source, destination);
+};
+
+const handleTabZoneDrop = async (event: Event) => {
+  const { source, paneId, insertIndex } = (
+    event as CustomEvent<{
+      source: NoteInfo;
+      paneId: string;
+      insertIndex: number;
+    }>
+  ).detail;
+  if (source.is_dir) return;
+  await openNote(source.name, source.path, {
+    paneId,
+    newTab: true,
+    insertIndex,
+  });
+};
+
+const handleFileNameZoneDrop = async (event: Event) => {
+  const { source, paneId } = (
+    event as CustomEvent<{
+      source: NoteInfo;
+      paneId: string;
+    }>
+  ).detail;
+  if (source.is_dir) return;
+  await openNote(source.name, source.path, {
+    paneId,
+    newTab: false,
+    replaceActive: true,
+  });
 };
 
 const closeContextMenu = () => {
@@ -301,6 +326,8 @@ const handleKeydown = (e: KeyboardEvent) => {
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
   window.addEventListener("tree-drag-drop", handleTreeDragDrop);
+  window.addEventListener("tab-zone-drop", handleTabZoneDrop);
+  window.addEventListener("file-name-zone-drop", handleFileNameZoneDrop);
   initTheme();
   initVault();
 });
@@ -308,6 +335,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeydown);
   window.removeEventListener("tree-drag-drop", handleTreeDragDrop);
+  window.removeEventListener("tab-zone-drop", handleTabZoneDrop);
+  window.removeEventListener("file-name-zone-drop", handleFileNameZoneDrop);
 });
 </script>
 
@@ -520,17 +549,37 @@ onUnmounted(() => {
         <div
           v-if="isDragging && dragSource && dragPosition"
           id="tree-drag-ghost"
-          class="fixed z-[100] pointer-events-none px-2 py-1 rounded-md text-xs font-medium shadow-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 max-w-[200px] truncate"
+          class="fixed z-[100] pointer-events-none px-2.5 py-1.5 rounded-md text-xs font-medium shadow-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 max-w-[240px] truncate flex items-center gap-1.5"
           :style="{
             left: `${dragPosition.x + 12}px`,
             top: `${dragPosition.y + 12}px`,
           }"
         >
-          {{
+          <FileTextIcon
+            v-if="!dragSource.is_dir"
+            class="w-3.5 h-3.5 shrink-0"
+            :style="{ color: accentColor }"
+          />
+          <FolderIcon v-else class="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+          <span class="truncate">{{
             dragSource.is_dir
               ? dragSource.name
               : dragSource.name.replace(/\.md$/, "")
-          }}
+          }}</span>
+          <span
+            v-if="dropTarget?.type === 'tab-zone'"
+            class="ml-1 px-1.5 py-0.5 rounded text-[10px] text-white font-medium shrink-0 shadow-xs"
+            :style="{ backgroundColor: accentColor }"
+          >
+            New tab
+          </span>
+          <span
+            v-else-if="dropTarget?.type === 'file-name-zone'"
+            class="ml-1 px-1.5 py-0.5 rounded text-[10px] text-white font-medium shrink-0 shadow-xs"
+            :style="{ backgroundColor: accentColor }"
+          >
+            Replace
+          </span>
         </div>
       </Teleport>
 
